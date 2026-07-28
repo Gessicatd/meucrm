@@ -121,8 +121,13 @@ cd /opt
 git clone https://github.com/douglaswbc/wacrm
 cd wacrm
 
-# Compile a imagem Docker
-docker build -t wacrm:latest .
+# Compile a imagem Docker (valores dummy apenas para o build —
+# as variáveis reais vão no wacrm.yaml em runtime)
+docker build \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL=https://dummy.supabase.co \
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-key \
+  --build-arg NEXT_PUBLIC_SITE_URL=https://wacrm.example.com \
+  -t wacrm:latest .
 
 # Copie o arquivo de stack de exemplo e edite com seu domínio e secrets
 cp example.wacrm.yaml wacrm.yaml
@@ -202,7 +207,11 @@ git pull
 # Compare example.wacrm.yaml com seu wacrm.yaml — adicione novas env vars
 diff example.wacrm.yaml wacrm.yaml
 
-docker build -t wacrm:latest .
+docker build \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL=https://dummy.supabase.co \
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-key \
+  --build-arg NEXT_PUBLIC_SITE_URL=https://wacrm.example.com \
+  -t wacrm:latest .
 docker stack deploy -c wacrm.yaml wacrm
 ```
 
