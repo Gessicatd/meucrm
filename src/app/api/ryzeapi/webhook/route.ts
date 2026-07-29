@@ -244,11 +244,15 @@ export async function POST(request: Request) {
       messageType = 'interactive'
       const bm = msgData.buttonsResponseMessage as Record<string, unknown>
       contentText = String(bm.selectedDisplayText ?? '')
+      interactiveReplyId = String(bm.selectedButtonId ?? '') || null
+      interactiveReplyTitle = contentText
     } else if (msgData.listResponseMessage) {
       messageType = 'interactive'
       const lm = msgData.listResponseMessage as Record<string, unknown>
       const reply = (lm.singleSelectReply as Record<string, unknown> | null) ?? {}
       contentText = String(reply.selectedRowId ?? '')
+      interactiveReplyId = contentText
+      interactiveReplyTitle = String(reply.selectedRowId ?? '') || null
     } else if (typeof payload.content === 'string') {
       contentText = payload.content
     } else if (typeof payload.body === 'string') {
@@ -516,6 +520,7 @@ async function processInboundMessage(
       text: text,
       channel: 'whatsapp',
       provider: 'ryzeapi',
+      ...(interactiveReplyId ? { interactive_reply_id: interactiveReplyId } : {}),
     },
   ).catch((err) => console.error('[webhook] dispatch failed:', err))
 }

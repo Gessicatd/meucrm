@@ -604,6 +604,7 @@ async function processMessage(
     text: contentText,
     media_url: mediaUrl,
     sender: { id: senderId },
+    ...(interactiveReplyId ? { interactive_reply_id: interactiveReplyId } : {}),
   })
 }
 

@@ -845,6 +845,7 @@ async function processMessage(
     text: contentText,
     channel: 'whatsapp',
     provider: 'meta',
+    ...(interactiveReplyId ? { interactive_reply_id: interactiveReplyId } : {}),
   })
 }
 
