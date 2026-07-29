@@ -9,6 +9,27 @@ import {
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
 import { supabaseAdmin } from './admin-client'
+import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
+
+function fireMessageSent(
+  db: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+  conversationId: string,
+  sender_type: 'bot',
+  content_type: string,
+  text: string | null,
+  channel: string,
+  provider: string,
+) {
+  void dispatchWebhookEvent(db, accountId, 'message.sent', {
+    conversation_id: conversationId,
+    sender_type,
+    content_type,
+    text,
+    channel,
+    provider,
+  }).catch((err) => console.error('[webhook] message.sent dispatch failed:', err))
+}
 
 // ------------------------------------------------------------
 // Automation-side Meta sender.
@@ -251,6 +272,8 @@ async function sendViaWhatsAppAPI(
     })
     .eq('id', input.conversationId)
 
+  fireMessageSent(db, input.accountId, input.conversationId, 'bot', content_type, content_text, 'whatsapp', 'meta')
+
   return { whatsapp_message_id: waMessageId }
 }
 
@@ -346,6 +369,8 @@ async function sendViaRyzeAPI(
       updated_at: new Date().toISOString(),
     })
     .eq('id', input.conversationId)
+
+  fireMessageSent(db, input.accountId, input.conversationId, 'bot', content_type, content_text, 'whatsapp', 'ryzeapi')
 
   return { whatsapp_message_id: ryzeMessageId }
 }
@@ -473,6 +498,8 @@ async function sendViaInstagramAPI(
       updated_at: new Date().toISOString(),
     })
     .eq('id', input.conversationId)
+
+  fireMessageSent(db, input.accountId, input.conversationId, 'bot', content_type, content_text, 'instagram', 'meta')
 
   return { whatsapp_message_id: igMessageId }
 }

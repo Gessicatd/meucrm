@@ -89,6 +89,7 @@ export async function POST(request: Request) {
   const isNewFormat = !!(rawData.chat || rawData.sender)
 
   let fromRaw: string
+  let isOutbound = false
   let messageId: string
   let messageType: string
   let contentText: string | null = null
@@ -103,14 +104,15 @@ export async function POST(request: Request) {
     const sender = (rawData.sender as Record<string, unknown> | null) ?? {}
     const msg = (rawData.message as Record<string, unknown> | null) ?? {}
 
-    // Skip outgoing messages.
     const direction = String(rawData.direction ?? '')
-    if (direction === 'outgoing') {
-      return NextResponse.json({ status: 'ok' })
-    }
+    isOutbound = direction === 'outgoing'
 
-    // Sender JID.
-    fromRaw = String(sender.jid ?? chat.jid ?? '')
+    // Sender JID. For outgoing messages the recipient is `chat.jid`;
+    // for incoming the sender is `sender.jid` (which equals `chat.jid`
+    // in a 1:1 chat, but preferring `sender.jid` is the safe default).
+    fromRaw = isOutbound
+      ? String(chat.jid ?? sender.jid ?? '')
+      : String(sender.jid ?? chat.jid ?? '')
     if (!fromRaw) {
       return NextResponse.json({ status: 'ok' })
     }
@@ -203,7 +205,7 @@ export async function POST(request: Request) {
     }
 
     if (key.fromMe) {
-      return NextResponse.json({ status: 'ok' })
+      isOutbound = true
     }
 
     messageId = String(
@@ -306,21 +308,35 @@ export async function POST(request: Request) {
     }
 
     try {
-      await processInboundMessage(db, {
-        accountId,
-        configOwnerUserId,
-        instanceName,
-        fromPhone: normalizedPhone,
-        pushName: pushName || null,
-        messageId,
-        messageType,
-        contentText,
-        interactiveReplyId,
-        interactiveReplyTitle,
-        timestamp,
-      })
+      if (isOutbound) {
+        await processOutboundMessage(db, {
+          accountId,
+          configOwnerUserId,
+          instanceName,
+          fromPhone: normalizedPhone,
+          pushName: pushName || null,
+          messageId,
+          messageType,
+          contentText,
+          timestamp,
+        })
+      } else {
+        await processInboundMessage(db, {
+          accountId,
+          configOwnerUserId,
+          instanceName,
+          fromPhone: normalizedPhone,
+          pushName: pushName || null,
+          messageId,
+          messageType,
+          contentText,
+          interactiveReplyId,
+          interactiveReplyTitle,
+          timestamp,
+        })
+      }
     } catch (err) {
-      console.error('[ryzeapi webhook] processInboundMessage error:', err)
+      console.error('[ryzeapi webhook] process error:', err)
     }
   })
 
@@ -502,6 +518,103 @@ async function processInboundMessage(
       provider: 'ryzeapi',
     },
   ).catch((err) => console.error('[webhook] dispatch failed:', err))
+}
+
+// ---- Outbound message processing (agent replied via phone) --------
+
+interface OutboundArgs {
+  accountId: string
+  configOwnerUserId: string
+  instanceName: string
+  fromPhone: string
+  pushName: string | null
+  messageId: string
+  messageType: string
+  contentText: string | null
+  timestamp: Date
+}
+
+async function processOutboundMessage(
+  db: ReturnType<typeof supabaseAdmin>,
+  args: OutboundArgs,
+) {
+  const {
+    accountId,
+    fromPhone,
+    messageId,
+    messageType,
+    contentText,
+    timestamp,
+  } = args
+
+  // 1. Find contact by phone.
+  const existing = await findExistingContact(db, accountId, fromPhone)
+  if (!existing) return
+
+  // 2. Find conversation.
+  const { data: conv } = await db
+    .from('conversations')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('contact_id', existing.id)
+    .eq('channel', 'whatsapp')
+    .eq('provider', 'ryzeapi')
+    .maybeSingle()
+  if (!conv) return
+
+  // 3. Dedup.
+  const { count: existingMsgCount } = await db
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conv.id)
+    .eq('message_id', messageId)
+  if (existingMsgCount && existingMsgCount > 0) return
+
+  // 4. Insert message with sender_type = 'agent'.
+  const contentType = mapContentType(messageType)
+  const text = contentText ?? null
+
+  const { error: msgErr } = await db.from('messages').insert({
+    account_id: accountId,
+    conversation_id: conv.id,
+    sender_type: 'agent',
+    content_type: contentType,
+    content_text: text,
+    message_id: messageId,
+    status: 'sent',
+    created_at: timestamp.toISOString(),
+  })
+  if (msgErr) {
+    console.error('[ryzeapi webhook] outbound message insert error:', msgErr)
+    return
+  }
+
+  // 5. Update conversation.
+  const preview = text?.slice(0, 200) ?? typePreview(messageType)
+  await db
+    .from('conversations')
+    .update({
+      last_message_text: preview,
+      last_message_at: timestamp.toISOString(),
+      updated_at: timestamp.toISOString(),
+    })
+    .eq('id', conv.id)
+
+  // 6. Dispatch message.sent webhook so n8n can detect human intervention.
+  await dispatchWebhookEvent(
+    db,
+    accountId,
+    'message.sent',
+    {
+      conversation_id: conv.id,
+      contact_id: existing.id,
+      sender_type: 'agent',
+      content_type: messageType,
+      text: text,
+      channel: 'whatsapp',
+      provider: 'ryzeapi',
+    },
+  ).catch((err) => console.error('[webhook] message.sent dispatch failed:', err))
 }
 
 // ---- Helpers -----------------------------------------------------------

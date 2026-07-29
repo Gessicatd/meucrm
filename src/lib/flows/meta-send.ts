@@ -28,6 +28,27 @@ import {
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
 import { supabaseAdmin } from './admin-client'
+import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
+
+function fireMessageSent(
+  db: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+  conversationId: string,
+  sender_type: 'bot',
+  content_type: string,
+  text: string | null,
+  channel: string,
+  provider: string,
+) {
+  void dispatchWebhookEvent(db, accountId, 'message.sent', {
+    conversation_id: conversationId,
+    sender_type,
+    content_type,
+    text,
+    channel,
+    provider,
+  }).catch((err) => console.error('[webhook] message.sent dispatch failed:', err))
+}
 
 // ------------------------------------------------------------
 // Flows-side Meta sender (interactive variants).
@@ -208,6 +229,8 @@ async function sendTextViaWhatsApp(
     })
     .eq('id', args.conversationId)
 
+  fireMessageSent(db, args.accountId, args.conversationId, 'bot', 'text', args.text, 'whatsapp', 'meta')
+
   return { whatsapp_message_id: waMessageId }
 }
 
@@ -271,6 +294,8 @@ async function sendTextViaRyzeApi(
     })
     .eq('id', args.conversationId)
 
+  fireMessageSent(db, args.accountId, args.conversationId, 'bot', 'text', args.text, 'whatsapp', 'ryzeapi')
+
   return { whatsapp_message_id: r.messageId }
 }
 
@@ -332,6 +357,8 @@ async function sendTextViaInstagram(
       updated_at: new Date().toISOString(),
     })
     .eq('id', args.conversationId)
+
+  fireMessageSent(db, args.accountId, args.conversationId, 'bot', 'text', args.text, 'instagram', 'meta')
 
   return { whatsapp_message_id: r.messageId }
 }
@@ -460,6 +487,8 @@ async function sendMediaViaWhatsApp(
     })
     .eq('id', args.conversationId)
 
+  fireMessageSent(db, args.accountId, args.conversationId, 'bot', args.kind, args.caption ?? null, 'whatsapp', 'meta')
+
   return { whatsapp_message_id: waMessageId }
 }
 
@@ -526,6 +555,8 @@ async function sendMediaViaRyzeApi(
       updated_at: new Date().toISOString(),
     })
     .eq('id', args.conversationId)
+
+  fireMessageSent(db, args.accountId, args.conversationId, 'bot', args.kind, args.caption ?? null, 'whatsapp', 'ryzeapi')
 
   return { whatsapp_message_id: r.messageId }
 }
@@ -598,6 +629,8 @@ async function sendMediaViaInstagram(
       updated_at: new Date().toISOString(),
     })
     .eq('id', args.conversationId)
+
+  fireMessageSent(db, args.accountId, args.conversationId, 'bot', args.kind, args.caption ?? null, 'instagram', 'meta')
 
   return { whatsapp_message_id: r.messageId }
 }
@@ -770,6 +803,8 @@ async function sendInteractiveViaWhatsApp(
     })
     .eq('id', input.conversationId)
 
+  fireMessageSent(db, input.accountId, input.conversationId, 'bot', 'interactive', input.bodyText, 'whatsapp', 'meta')
+
   return { whatsapp_message_id: waMessageId }
 }
 
@@ -856,6 +891,8 @@ async function sendInteractiveViaRyzeApi(
       updated_at: new Date().toISOString(),
     })
     .eq('id', input.conversationId)
+
+  fireMessageSent(db, input.accountId, input.conversationId, 'bot', 'interactive', input.bodyText, 'whatsapp', 'ryzeapi')
 
   return { whatsapp_message_id: ryzeMessageId }
 }
@@ -959,6 +996,8 @@ async function sendInteractiveViaInstagram(
       updated_at: new Date().toISOString(),
     })
     .eq('id', input.conversationId)
+
+  fireMessageSent(db, input.accountId, input.conversationId, 'bot', 'interactive', input.bodyText, 'instagram', 'meta')
 
   return { whatsapp_message_id: igMessageId }
 }

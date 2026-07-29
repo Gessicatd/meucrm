@@ -47,6 +47,7 @@ import {
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
 import { getRefreshedAccessToken } from '@/lib/instagram/token-refresh';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
+import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 import {
   sanitizePhoneForMeta,
   isValidE164,
@@ -576,6 +577,16 @@ export async function sendMessageToConversation(
     );
   }
 
+  void dispatchWebhookEvent(supabaseAdmin(), accountId, 'message.sent', {
+    conversation_id: conversationId,
+    message_id: messageRecord.id,
+    sender_type: 'agent',
+    content_type: messageType,
+    text: contentText || null,
+    channel,
+    provider,
+  }).catch((err) => console.error('[webhook] message.sent dispatch failed:', err))
+
   await db
     .from('conversations')
     .update({
@@ -764,6 +775,16 @@ async function sendRyzeMessage(
     );
   }
 
+  void dispatchWebhookEvent(supabaseAdmin(), accountId, 'message.sent', {
+    conversation_id: conversationId,
+    message_id: messageRecord.id,
+    sender_type: 'agent',
+    content_type: messageType,
+    text: contentText || null,
+    channel: 'whatsapp',
+    provider: 'ryzeapi',
+  }).catch((err) => console.error('[webhook] message.sent dispatch failed:', err))
+
   await db
     .from('conversations')
     .update({
@@ -946,6 +967,16 @@ async function sendInstagramMessage(
       500,
     );
   }
+
+  void dispatchWebhookEvent(supabaseAdmin(), accountId, 'message.sent', {
+    conversation_id: conversationId,
+    message_id: messageRecord.id,
+    sender_type: 'agent',
+    content_type: messageType,
+    text: contentText || null,
+    channel: 'instagram',
+    provider: 'meta',
+  }).catch((err) => console.error('[webhook] message.sent dispatch failed:', err))
 
   await db
     .from('conversations')

@@ -300,9 +300,12 @@ async function processMessage(
     'from:', senderId,
     'text:', msg.text?.substring(0, 100))
 
-  // Ignore echo messages (sent by the business).
+  // Echo messages — sent by the business (agent via phone or dashboard).
+  // Save with sender_type = 'agent' and dispatch message.sent so n8n
+  // can detect human intervention. The recipient is the customer.
   if (msg.is_echo) {
-    console.log('[instagram webhook] skipping echo message')
+    console.log('[instagram webhook] processing echo message')
+    await processEchoMessage(db, config, item)
     return
   }
 
@@ -602,6 +605,114 @@ async function processMessage(
     media_url: mediaUrl,
     sender: { id: senderId },
   })
+}
+
+// Echo messages — sent by the business (agent via phone or dashboard).
+// Save with sender_type = 'agent' and dispatch message.sent so n8n can
+// detect human intervention. The echo sender is us (the business), so
+// the customer is `item.recipient.id`.
+
+async function processEchoMessage(
+  db: ReturnType<typeof supabaseAdmin>,
+  config: InstagramConfigRow,
+  item: InstagramMessagingItem,
+) {
+  const msg = item.message!
+  const accountId = config.account_id
+  const customerIgId = item.recipient.id
+
+  // Determine content type and text from the echo payload.
+  let contentText: string | null = null
+  if (msg.text) {
+    contentText = msg.text
+  } else if (msg.attachments && msg.attachments.length > 0) {
+    contentText = msg.text ?? `[${msg.attachments[0].type}]`
+  }
+
+  // Find contact by Instagram ID.
+  const { data: contact } = await db
+    .from('contacts')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('instagram_id', customerIgId)
+    .maybeSingle()
+  if (!contact) return
+
+  // Find or create conversation.
+  let { data: conv } = await db
+    .from('conversations')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('contact_id', contact.id)
+    .eq('channel', 'instagram')
+    .maybeSingle()
+
+  if (!conv) {
+    const { data: created } = await db
+      .from('conversations')
+      .insert({
+        account_id: accountId,
+        user_id: config.user_id,
+        contact_id: contact.id,
+        channel: 'instagram',
+        provider: 'meta',
+        status: 'open',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+    conv = created
+  }
+
+  // Dedup by message ID.
+  const { count: existing } = await db
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conv.id)
+    .eq('message_id', msg.mid)
+  if (existing && existing > 0) return
+
+  // Insert with sender_type = 'agent'.
+  const { error: msgErr } = await db.from('messages').insert({
+    account_id: accountId,
+    conversation_id: conv.id,
+    sender_type: 'agent',
+    content_type: 'text',
+    content_text: contentText,
+    message_id: msg.mid,
+    status: 'sent',
+  })
+  if (msgErr) {
+    console.error('[instagram webhook] echo message insert error:', msgErr)
+    return
+  }
+
+  // Update conversation.
+  await db
+    .from('conversations')
+    .update({
+      last_message_text: contentText ?? '[echo]',
+      last_message_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', conv.id)
+
+  // Dispatch message.sent webhook.
+  await dispatchWebhookEvent(
+    db,
+    accountId,
+    'message.sent',
+    {
+      conversation_id: conv.id,
+      contact_id: contact.id,
+      sender_type: 'agent',
+      content_type: 'text',
+      text: contentText,
+      channel: 'instagram',
+      provider: 'meta',
+    },
+  ).catch((err) => console.error('[webhook] message.sent dispatch failed:', err))
 }
 
 // ============================================================
