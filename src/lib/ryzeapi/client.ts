@@ -566,17 +566,26 @@ export interface SendPixArgs {
 }
 
 export async function sendPix(args: SendPixArgs): Promise<RyzeApiSendResult> {
-  const result = await mcpCall(args.apiUrl, args.instanceToken, 'ryzeapi_send_pix', {
-    instance: args.instance,
+  const body: Record<string, unknown> = {
     number: args.number,
     merchantName: args.merchantName,
     pixKey: args.pixKey,
     pixKeyType: args.pixKeyType,
-    message: args.message,
-    items: args.items,
-    delay: args.delay,
-    replyTo: args.replyTo,
-  })
+  }
+  if (args.message) body.message = args.message
+  if (args.items) body.items = args.items
+  if (args.delay !== undefined) body.delay = args.delay
+  if (args.replyTo) body.replyTo = args.replyTo
+
+  const result = await restFetch<Record<string, unknown>>(
+    args.apiUrl,
+    args.instanceToken,
+    `/api/message/pix/${encodeURIComponent(args.instance)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  )
   const r = result as Record<string, unknown>
   return { messageId: String(r?.messageId ?? r?.message_id ?? r?.id ?? '') }
 }

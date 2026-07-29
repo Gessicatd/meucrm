@@ -101,7 +101,19 @@ curl -X POST https://your-crm.example.com/api/v1/messages \\
     ]
   }'
 
-# PIX payment (RyzeAPI only)
+# PIX payment — simple (RyzeAPI only)
+curl -X POST https://your-crm.example.com/api/v1/messages \\
+  -H "Authorization: Bearer wacrm_live_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": "+14155550123",
+    "type": "pix",
+    "pix_key": "12345678000199",
+    "pix_key_type": "CNPJ",
+    "merchant_name": "Acme Store"
+  }'
+
+# PIX payment — with order items (RyzeAPI only)
 curl -X POST https://your-crm.example.com/api/v1/messages \\
   -H "Authorization: Bearer wacrm_live_xxx" \\
   -H "Content-Type: application/json" \\
