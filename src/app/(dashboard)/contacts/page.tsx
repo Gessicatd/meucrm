@@ -818,6 +818,12 @@ export default function ContactsPage() {
               {t('contacts.deleteBulkConfirm').replace('{n}', selected.size.toString())}
             </DialogDescription>
           </DialogHeader>
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            <strong className="font-semibold text-amber-200">
+              This will also permanently delete:
+            </strong>{' '}
+            all conversations, messages, and pipeline deals associated with these contacts.
+          </div>
           <DialogFooter className="bg-popover border-border">
             <Button
               variant="outline"
