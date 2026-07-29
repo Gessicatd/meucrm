@@ -23,7 +23,7 @@ export async function requireWorkspaceFeature(
     .from('accounts')
     .select('workspace_features')
     .eq('id', accountId)
-    .maybeSingle();
+    .maybeSingle<{ workspace_features: string[] | null }>();
 
   if (error || !account) {
     throw new ForbiddenError('Account not found');
