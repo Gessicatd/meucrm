@@ -176,7 +176,7 @@ export function ContactForm({
         contactId = data.id;
 
         // Auto-create deal for new contact
-        void autoCreateDealForContact(supabase, accountId!, user.id, contactId, name || null);
+        void autoCreateDealForContact(supabase, accountId!, user.id, contactId!, name || null);
       }
 
       // Sync tags
