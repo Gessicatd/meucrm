@@ -187,6 +187,8 @@ export default function AdminPage() {
       setFeatureSaving(false);
     }
   }
+
+  async function handleDelete() {
     if (!deleting) return;
     setPendingAction(deleting.id);
     try {
