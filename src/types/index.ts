@@ -80,6 +80,12 @@ export interface Account {
   owner_user_id: string;
   created_at: string;
   updated_at: string;
+  /**
+   * Workspace settings sections visible to this account.
+   * NULL = all features enabled (default). Empty array = none.
+   * Managed by super admins via /api/admin/accounts/[id]/features.
+   */
+  workspace_features?: string[] | null;
 }
 
 /**

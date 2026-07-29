@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/hooks/use-language';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { useWorkspaceFeatures } from '@/hooks/use-workspace-features';
 import { SettingsRail } from '@/components/settings/settings-rail';
 import { SettingsOverview } from '@/components/settings/settings-overview';
 import { ProfileForm } from '@/components/settings/profile-form';
@@ -26,6 +27,7 @@ import { WebhooksSettings } from '@/components/settings/webhooks-settings';
 import { MetaCapiConfig } from '@/components/settings/meta-capi-config';
 import {
   resolveSection,
+  SECTION_META,
   type SettingsSection,
 } from '@/components/settings/settings-sections';
 
@@ -43,12 +45,21 @@ function SettingsPageContent() {
   const { t } = useLanguage();
   const { defaultCurrency } = useAuth();
   const { mode } = useTheme();
+  const enabledFeatures = useWorkspaceFeatures();
 
   // The URL (`?tab=`) is the single source of truth for the active
   // section — deep-linkable, and it keeps the existing links in the
   // app sidebar/header working. Legacy tab values (tags, custom-fields)
   // resolve onto their new home; unknown/empty → the Overview landing.
-  const section = resolveSection(searchParams?.get('tab') ?? null);
+  const rawSection = resolveSection(searchParams?.get('tab') ?? null);
+
+  // If the section is a workspace feature that is not enabled, redirect
+  // to overview. Account and top sections are always visible.
+  const sectionMeta = SECTION_META[rawSection];
+  const section =
+    sectionMeta?.group === 'workspace' && !enabledFeatures.has(rawSection)
+      ? 'overview'
+      : rawSection;
 
   const go = (next: SettingsSection) => {
     const raw = searchParams?.toString() ?? window.location.search.slice(1);
@@ -101,7 +112,7 @@ function SettingsPageContent() {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
-        <SettingsRail active={section} onSelect={go} hints={hints} />
+        <SettingsRail active={section} onSelect={go} hints={hints} enabledFeatures={enabledFeatures} />
         <div className="min-w-0">{panel[section]}</div>
       </div>
     </div>

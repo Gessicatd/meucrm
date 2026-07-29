@@ -7,6 +7,7 @@ import {
   CheckCircle,
   Loader2,
   Search,
+  Settings2,
   Shield,
   ShieldOff,
   Trash2,
@@ -27,7 +28,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
+import { WORKSPACE_FEATURE_META, type WorkspaceFeature } from "@/lib/features";
 
 interface Owner {
   user_id: string;
@@ -68,6 +72,9 @@ export default function AdminPage() {
   const [search, setSearch] = useState("");
   const [deleting, setDeleting] = useState<Account | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [featureAccount, setFeatureAccount] = useState<Account | null>(null);
+  const [featureList, setFeatureList] = useState<string[]>([]);
+  const [featureSaving, setFeatureSaving] = useState(false);
 
   const loadAccounts = useCallback(async () => {
     try {
@@ -129,7 +136,57 @@ export default function AdminPage() {
     }
   }
 
-  async function handleDelete() {
+  async function handleOpenFeatures(account: Account) {
+    setFeatureAccount(account);
+    setFeatureSaving(false);
+    try {
+      const res = await fetch(`/api/admin/accounts/${account.id}/features`);
+      if (!res.ok) {
+        toast.error("Failed to load features");
+        setFeatureList([]);
+        return;
+      }
+      const data = (await res.json()) as { features: string[] };
+      setFeatureList(data.features);
+    } catch {
+      toast.error("Could not reach the server");
+      setFeatureList([]);
+    }
+  }
+
+  function handleToggleFeature(feature: string) {
+    setFeatureList((prev) =>
+      prev.includes(feature)
+        ? prev.filter((f) => f !== feature)
+        : [...prev, feature],
+    );
+  }
+
+  async function handleSaveFeatures() {
+    if (!featureAccount) return;
+    setFeatureSaving(true);
+    try {
+      const res = await fetch(
+        `/api/admin/accounts/${featureAccount.id}/features`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ features: featureList }),
+        },
+      );
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error || "Failed to save features");
+        return;
+      }
+      toast.success(`Features updated for ${featureAccount.name}`);
+      setFeatureAccount(null);
+    } catch {
+      toast.error("Could not reach the server");
+    } finally {
+      setFeatureSaving(false);
+    }
+  }
     if (!deleting) return;
     setPendingAction(deleting.id);
     try {
@@ -279,6 +336,14 @@ export default function AdminPage() {
                             <Button
                               variant="outline"
                               size="sm"
+                              onClick={() => handleOpenFeatures(account)}
+                              className="border-border bg-muted text-muted-foreground hover:bg-muted-foreground/10"
+                            >
+                              <Settings2 className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => handleToggleStatus(account)}
                               disabled={pendingAction === account.id}
                               className={
@@ -367,6 +432,78 @@ export default function AdminPage() {
                 </>
               ) : (
                 "Delete account"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={featureAccount !== null}
+        onOpenChange={(open) => {
+          if (!open) setFeatureAccount(null);
+        }}
+      >
+        <DialogContent className="bg-popover border-border sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-popover-foreground">
+              <Settings2 className="size-4 text-primary" />
+              Workspace features — {featureAccount?.name}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Select which Settings → Workspace sections are visible to this account.
+              Unchecked sections will be hidden from the settings sidebar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            {Object.values(WORKSPACE_FEATURE_META).map(
+              (meta: (typeof WORKSPACE_FEATURE_META)[WorkspaceFeature]) => {
+                const Icon = meta.icon;
+                const checked = featureList.includes(meta.key);
+                return (
+                  <label
+                    key={meta.key}
+                    className="flex items-start gap-3 rounded-lg border border-border p-3 cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary/50 has-[:checked]:bg-primary/5"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => handleToggleFeature(meta.key)}
+                      className="mt-0.5"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                        <Icon className="size-3.5 text-muted-foreground" />
+                        {meta.label}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {meta.description}
+                      </p>
+                    </div>
+                  </label>
+                );
+              },
+            )}
+          </div>
+          <DialogFooter className="bg-popover border-border">
+            <Button
+              variant="outline"
+              onClick={() => setFeatureAccount(null)}
+              className="border-border text-muted-foreground hover:bg-muted"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveFeatures}
+              disabled={featureSaving}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {featureSaving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save features"
               )}
             </Button>
           </DialogFooter>
