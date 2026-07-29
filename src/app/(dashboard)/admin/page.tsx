@@ -457,7 +457,7 @@ export default function AdminPage() {
               Unchecked sections will be hidden from the settings sidebar.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
+          <div className="grid grid-cols-2 gap-3 py-2 max-h-[60vh] overflow-y-auto pr-1">
             {Object.values(WORKSPACE_FEATURE_META).map(
               (meta: (typeof WORKSPACE_FEATURE_META)[WorkspaceFeature]) => {
                 const Icon = meta.icon;
