@@ -103,7 +103,7 @@ async function restFetch<T>(
     ...(init.headers as Record<string, string> | undefined),
   }
 
-  const res = await fetch(url, { ...init, headers })
+  const res = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(120_000) })
   if (!res.ok) {
     let message = `RyzeAPI returned ${res.status}`
     try {
@@ -251,6 +251,7 @@ async function mcpCall(
     method: 'POST',
     headers: sessionHeaders,
     body: JSON.stringify(callBody),
+    signal: AbortSignal.timeout(120_000),
   })
 
   if (!callRes.ok) {
