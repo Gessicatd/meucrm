@@ -24,6 +24,7 @@ import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { getIgUserProfile } from '@/lib/instagram/meta-api'
 import { fireCapiEvent, getCapiConfig } from '@/lib/meta/capi-store'
+import { autoCreateDealForContact } from '@/lib/deals/auto-create'
 
 // Lazy-initialized to avoid build-time crash when env vars are missing
 let _adminClient: any = null
@@ -380,6 +381,13 @@ async function processMessage(
 
     // Fire CAPI Lead event for new Instagram contacts.
     void fireCapiLeadForInstagramContact(accountId, contactId)
+    void autoCreateDealForContact(
+      db,
+      accountId,
+      configUserId,
+      contactId,
+      null,
+    )
   }
 
   // Fetch Instagram profile to populate name/username if missing.

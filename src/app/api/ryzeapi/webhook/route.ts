@@ -6,6 +6,7 @@ import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
+import { autoCreateDealForContact } from '@/lib/deals/auto-create'
 import type { ParsedInbound } from '@/lib/flows/types'
 import type { AutomationTriggerType } from '@/types'
 
@@ -402,6 +403,16 @@ async function processInboundMessage(
   // 1. Find or create contact.
   const contactOutcome = await upsertContact(db, accountId, configOwnerUserId, fromPhone, pushName)
   const contactId = contactOutcome.id
+
+  if (contactOutcome.wasCreated) {
+    void autoCreateDealForContact(
+      db,
+      accountId,
+      configOwnerUserId,
+      contactId,
+      pushName,
+    )
+  }
 
   // 2. Find or create conversation.
   const conversationId = await upsertConversation(

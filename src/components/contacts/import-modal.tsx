@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { autoCreateDealForContact } from '@/lib/deals/auto-create';
 import {
   dedupeByPhone,
   isUniqueViolation,
@@ -303,6 +304,13 @@ export function ImportModal({
                   tagNames: source.tagNames,
                 });
               }
+              void autoCreateDealForContact(
+                supabase,
+                accountId,
+                user.id,
+                singleData.id,
+                row.name || null,
+              );
             } else if (isUniqueViolation(singleErr)) {
               skipped++;
             } else {
@@ -317,11 +325,21 @@ export function ImportModal({
           // parallel inserts, zip by phone or returned id instead.
           for (let j = 0; j < inserted.length; j++) {
             const source = chunk[j];
-            if (!source || source.tagNames.length === 0) continue;
-            tagAssignments.push({
-              contactId: inserted[j].id,
-              tagNames: source.tagNames,
-            });
+            if (source) {
+              if (source.tagNames.length > 0) {
+                tagAssignments.push({
+                  contactId: inserted[j].id,
+                  tagNames: source.tagNames,
+                });
+              }
+              void autoCreateDealForContact(
+                supabase,
+                accountId,
+                user.id,
+                inserted[j].id,
+                source.name || null,
+              );
+            }
           }
         }
       }

@@ -24,6 +24,7 @@ import {
   resolveAuditUserId,
   ContactError,
 } from '@/lib/api/v1/contacts';
+import { autoCreateDealForContact } from '@/lib/deals/auto-create';
 
 // PostgREST filter values are comma/paren-delimited; strip anything
 // that could break the `.or()` grammar before interpolating a search
@@ -135,6 +136,17 @@ export async function POST(request: Request) {
     }
 
     const contact = await getContactById(ctx.supabase, ctx.accountId, id);
+
+    if (created) {
+      void autoCreateDealForContact(
+        ctx.supabase,
+        ctx.accountId,
+        auditUserId,
+        id,
+        typeof body.name === 'string' ? body.name : undefined,
+      );
+    }
+
     return ok(contact, created ? 201 : 200);
   } catch (err) {
     if (err instanceof ContactError) {

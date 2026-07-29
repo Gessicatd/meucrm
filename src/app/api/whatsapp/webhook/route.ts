@@ -14,6 +14,7 @@ import {
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
 import { fireCapiEvent, getCapiConfig } from '@/lib/meta/capi-store'
+import { autoCreateDealForContact } from '@/lib/deals/auto-create'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -589,6 +590,13 @@ async function processMessage(
   // Fire CAPI Lead event for new contacts created via WhatsApp.
   if (contactOutcome.wasCreated) {
     void fireCapiLeadForContact(accountId, contactRecord)
+    void autoCreateDealForContact(
+      supabaseAdmin(),
+      accountId,
+      configOwnerUserId,
+      contactRecord.id,
+      contactRecord.name,
+    )
   }
 
   // Find or create conversation
