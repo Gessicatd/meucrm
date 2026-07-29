@@ -500,8 +500,11 @@ export default function ContactsPage() {
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/40 px-4 py-2">
-          <p className="text-sm text-foreground">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 animate-in fade-in slide-in-from-top-2">
+          <p className="text-sm font-medium text-foreground">
+            <span className="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold size-5 mr-2">
+              {selected.size}
+            </span>
             {t('contacts.nSelected').replace('{n}', selected.size.toString())}
           </p>
           <div className="flex items-center gap-2">
@@ -532,14 +535,19 @@ export default function ContactsPage() {
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
-              <TableHead className="w-10">
-                <Checkbox
-                  checked={allOnPageSelected}
-                  indeterminate={!allOnPageSelected && someOnPageSelected}
-                  onCheckedChange={toggleSelectAll}
-                  disabled={contacts.length === 0}
-                  aria-label={t('contacts.selectAll')}
-                />
+              <TableHead className="w-12">
+                <div className="flex items-center gap-1.5">
+                  <Checkbox
+                    checked={allOnPageSelected}
+                    indeterminate={!allOnPageSelected && someOnPageSelected}
+                    onCheckedChange={toggleSelectAll}
+                    disabled={contacts.length === 0}
+                    aria-label={t('contacts.selectAll')}
+                  />
+                  <span className="text-[11px] text-muted-foreground hidden sm:inline select-none">
+                    {t('contacts.selectAllLabel') || 'All'}
+                  </span>
+                </div>
               </TableHead>
               <TableHead className="text-muted-foreground">{t('contacts.name')}</TableHead>
               <TableHead className="text-muted-foreground">{t('contacts.phone')}</TableHead>
@@ -593,11 +601,12 @@ export default function ContactsPage() {
                   className="border-border hover:bg-muted/50 cursor-pointer"
                   onClick={() => openDetail(contact.id)}
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+                  <TableCell onClick={(e) => e.stopPropagation()} className="group">
                     <Checkbox
                       checked={selected.has(contact.id)}
                       onCheckedChange={() => toggleSelect(contact.id)}
                       aria-label={t('contacts.selectRow').replace('{name}', contact.name || contact.phone || '')}
+                      className="group-hover:ring-2 group-hover:ring-primary/30 transition-shadow rounded-sm"
                     />
                   </TableCell>
                   <TableCell className="text-foreground font-medium">
