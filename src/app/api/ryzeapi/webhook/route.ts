@@ -164,6 +164,29 @@ export async function POST(request: Request) {
         }
         break
       }
+      case 'buttons_response':
+      case 'list_response':
+        messageType = 'interactive'
+        // eslint-disable-next-line no-case-declarations
+        const interResp = msg.interactive as Record<string, unknown> | null
+        if (interResp) {
+          interactiveReplyId = interResp.buttonId
+            ? String(interResp.buttonId)
+            : interResp.listId
+              ? String(interResp.listId)
+              : interResp.selectedRowId
+                ? String(interResp.selectedRowId)
+                : null
+          interactiveReplyTitle = interResp.title
+            ? String(interResp.title)
+            : interResp.description
+              ? String(interResp.description)
+              : interResp.selectedDisplayText
+                ? String(interResp.selectedDisplayText)
+                : String(interResp.selectedRowId ?? '')
+          contentText = interactiveReplyTitle
+        }
+        break
       default:
         contentText = String(msg.content ?? null)
     }
