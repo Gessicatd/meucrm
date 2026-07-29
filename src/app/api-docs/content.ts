@@ -159,6 +159,26 @@ curl -X POST https://your-crm.example.com/api/v1/messages \\
     "to": "+14155550123",
     "type": "audio",
     "media_url": "https://example.com/audio/voice-note.ogg"
+  }'
+
+# Interactive list (RyzeAPI)
+curl -X POST https://your-crm.example.com/api/v1/messages \\
+  -H "Authorization: Bearer wacrm_live_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": "+14155550123",
+    "type": "list",
+    "text": "Select an item:",
+    "button_label": "View options",
+    "sections": [
+      {
+        "title": "Dishes",
+        "rows": [
+          { "id": "p1", "title": "Lasagna", "description": "4 slices" },
+          { "id": "p2", "title": "Risotto", "description": "Funghi" }
+        ]
+      }
+    ]
   }'`,
   json: `{
   "data": {
@@ -172,6 +192,7 @@ curl -X POST https://your-crm.example.com/api/v1/messages \\
   notes: [
     'Domain error codes: whatsapp_not_configured (400), meta_error (502), template_malformed (500), ryzeapi_not_configured (400), ryzeapi_error (502), instagram_not_configured (400), instagram_error (502)',
     'PIX messages are only available via the RyzeAPI provider (native WhatsApp protocol). Meta Cloud API does not support PIX cards.',
+    'Interactive list and button messages are available via the RyzeAPI provider. Use "buttons" or "list" as the message type with the "buttons" / "sections" / "button_label" fields.',
   ],
 };
 

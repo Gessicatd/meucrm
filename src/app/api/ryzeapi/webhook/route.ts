@@ -155,38 +155,34 @@ export async function POST(request: Request) {
         contentText = react?.text ? String(react.text) : null
         break
       }
-      case 'interactive': {
+      case 'interactive':
+      case 'buttons_response':
+      case 'list_response': {
+        if (messageType !== 'interactive') messageType = 'interactive'
         const inter = msg.interactive as Record<string, unknown> | null
         if (inter) {
-          interactiveReplyId = inter.buttonId ? String(inter.buttonId) : inter.listId ? String(inter.listId) : null
-          interactiveReplyTitle = inter.title ? String(inter.title) : inter.description ? String(inter.description) : null
+          const selectedReply = inter.selectedReply as Record<string, unknown> | null
+          interactiveReplyId =
+            String(inter.selectedButtonId ?? '') ||
+            String(inter.buttonId ?? '') ||
+            String(selectedReply?.selectedRowID ?? '') ||
+            String(inter.listId ?? '') ||
+            null
+          interactiveReplyTitle =
+            String(inter.title ?? '') ||
+            String(inter.description ?? '') ||
+            null
+          if (interactiveReplyTitle === null) {
+            // Fallback: use row ID or button display text as title
+            interactiveReplyTitle =
+              String(selectedReply?.selectedRowID ?? '') ||
+              String(inter.selectedDisplayText ?? '') ||
+              null
+          }
           contentText = interactiveReplyTitle
         }
         break
       }
-      case 'buttons_response':
-      case 'list_response':
-        messageType = 'interactive'
-        // eslint-disable-next-line no-case-declarations
-        const interResp = msg.interactive as Record<string, unknown> | null
-        if (interResp) {
-          interactiveReplyId = interResp.buttonId
-            ? String(interResp.buttonId)
-            : interResp.listId
-              ? String(interResp.listId)
-              : interResp.selectedRowId
-                ? String(interResp.selectedRowId)
-                : null
-          interactiveReplyTitle = interResp.title
-            ? String(interResp.title)
-            : interResp.description
-              ? String(interResp.description)
-              : interResp.selectedDisplayText
-                ? String(interResp.selectedDisplayText)
-                : String(interResp.selectedRowId ?? '')
-          contentText = interactiveReplyTitle
-        }
-        break
       default:
         contentText = String(msg.content ?? null)
     }
