@@ -71,7 +71,7 @@ export async function PATCH(
         console.error('[api/calendar/events] PATCH sync error:', err);
         return NextResponse.json(
           { error: 'Failed to sync update with Google Calendar' },
-          { status: 502 }
+          { status: 500 }
         );
       }
     }
@@ -133,7 +133,7 @@ export async function DELETE(
         console.error('[api/calendar/events] DELETE sync error:', err);
         return NextResponse.json(
           { error: 'Failed to sync delete with Google Calendar' },
-          { status: 502 }
+          { status: 500 }
         );
       }
     }

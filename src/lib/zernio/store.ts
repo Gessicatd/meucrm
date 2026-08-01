@@ -156,3 +156,22 @@ export async function refreshSocialAccounts(
 
   return socialAccounts;
 }
+
+/**
+ * Get the Zernio social account ID for a specific platform belonging to a WACRM account.
+ *
+ * Reads the cached `connected_accounts` JSONB column from zernio_connections
+ * and returns the first matching entry for the given platform.
+ */
+export async function getSocialAccountId(
+  accountId: string,
+  platform: string,
+): Promise<string | null> {
+  const connection = await getConnection(accountId);
+  if (!connection?.connected_accounts?.length) return null;
+
+  const match = connection.connected_accounts.find(
+    (a) => a.platform === platform && a.isActive !== false,
+  );
+  return match?.accountId ?? null;
+}

@@ -460,3 +460,22 @@ export async function deleteTemplate(
     { method: 'DELETE' },
   );
 }
+
+export async function updateTemplate(args: {
+  accountId: string;
+  templateName: string;
+  category?: string;
+  components?: Array<{
+    type: string;
+    text?: string;
+    format?: string;
+    buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string }>;
+  }>;
+}): Promise<ZernioTemplate> {
+  const { accountId, templateName, ...body } = args;
+  const data = await zernioFetch<{ template: ZernioTemplate }>(
+    `/whatsapp/templates/${encodeURIComponent(templateName)}?accountId=${encodeURIComponent(accountId)}`,
+    { method: 'PATCH', body },
+  );
+  return data.template;
+}
