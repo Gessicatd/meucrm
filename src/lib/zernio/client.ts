@@ -23,13 +23,17 @@ async function zernioFetch<T>(
   });
 
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(
-      `Zernio API error (${response.status}): ${data.error ?? response.statusText}`,
-    );
+    const err = await response.json().catch(() => ({}));
+    const msg = err.data?.error ?? err.error ?? response.statusText;
+    throw new Error(`Zernio API error (${response.status}): ${msg}`);
   }
 
-  return response.json();
+  const json = await response.json();
+  // Auto-unwrap { data: {...} } envelope used by inbox, templates, posts
+  if (json.data && typeof json.data === 'object' && !Array.isArray(json.data)) {
+    return json.data as T;
+  }
+  return json as T;
 }
 
 // ─── Types ──────────────────────────────────────────────────
@@ -250,15 +254,15 @@ export async function sendInboxMessage(
   if (template) body.template = template;
 
   const resp = await zernioFetch<{
-    data: { id: string; conversationId: string };
+    id: string; conversationId: string;
   }>(`/inbox/conversations/${zernioConversationId}/messages`, {
     method: 'POST',
     body,
   });
 
   return {
-    messageId: resp.data.id,
-    conversationId: resp.data.conversationId,
+    messageId: resp.id,
+    conversationId: resp.conversationId,
   };
 }
 
@@ -289,15 +293,15 @@ export async function createInboxConversation(
   if (headerMedia) body.headerMedia = headerMedia;
 
   const resp = await zernioFetch<{
-    data: { messageId: string; conversationId: string };
+    messageId: string; conversationId: string;
   }>('/inbox/conversations', {
     method: 'POST',
     body,
   });
 
   return {
-    messageId: resp.data.messageId,
-    conversationId: resp.data.conversationId,
+    messageId: resp.messageId,
+    conversationId: resp.conversationId,
   };
 }
 
