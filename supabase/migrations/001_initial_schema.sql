@@ -517,7 +517,7 @@ CREATE TABLE IF NOT EXISTS automations (
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   account_id        UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   channel           TEXT CHECK (channel IS NULL OR channel IN ('whatsapp', 'instagram')),
-  provider          TEXT CHECK (provider IS NULL OR provider IN ('meta', 'ryzeapi')),
+  provider          TEXT CHECK (provider IS NULL OR provider IN ('meta', 'ryzeapi', 'zernio')),
   last_fired_at     TIMESTAMPTZ
 );
 
@@ -614,7 +614,7 @@ CREATE TABLE IF NOT EXISTS flows (
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   account_id        UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   channel           TEXT CHECK (channel IS NULL OR channel IN ('whatsapp', 'instagram')),
-  provider          TEXT CHECK (provider IS NULL OR provider IN ('meta', 'ryzeapi'))
+  provider          TEXT CHECK (provider IS NULL OR provider IN ('meta', 'ryzeapi', 'zernio'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_flows_active_trigger ON flows(user_id, trigger_type) WHERE status = 'active';
