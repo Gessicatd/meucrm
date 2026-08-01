@@ -275,7 +275,7 @@ export interface FlowRow {
   channel?: 'whatsapp' | 'instagram' | null;
   /** NULL = fires for both WhatsApp providers. 'meta' | 'ryzeapi'
    *  scopes this flow to only that WhatsApp provider. */
-  provider?: 'meta' | 'ryzeapi' | null;
+  provider?: 'meta' | 'ryzeapi' | 'zernio' | null;
   execution_count: number;
   last_executed_at: string | null;
   created_at: string;
@@ -382,7 +382,7 @@ export interface DispatchInboundInput {
   channel?: 'whatsapp' | 'instagram';
   /** WhatsApp provider. Used to filter flows scoped to a specific
    *  WhatsApp provider (NULL = both). Ignored for Instagram. */
-  provider?: 'meta' | 'ryzeapi';
+  provider?: 'meta' | 'ryzeapi' | 'zernio';
 }
 
 export interface DispatchInboundResult {
