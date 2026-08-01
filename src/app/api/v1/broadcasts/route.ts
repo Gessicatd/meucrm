@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     // Fan out after the response is sent. Uses the same service-role
     // client — no request-scoped auth needed for the Meta calls or
     // the account-scoped row updates.
-    after(() => deliverBroadcast(ctx.supabase, plan));
+    after(() => deliverBroadcast(ctx.supabase, ctx.accountId, auditUserId, plan));
 
     return ok(
       {

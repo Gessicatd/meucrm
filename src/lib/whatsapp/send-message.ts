@@ -84,6 +84,8 @@ export interface SendMessageParams {
   pixItems?: { name: string; description?: string; quantity: number; unitPrice: number }[] | null;
   // Link preview for text messages
   linkPreview?: boolean | null;
+  // Sender override for bot messages (automations/flows)
+  senderType?: 'agent' | 'bot';
 }
 
 export interface SendMessageResult {
@@ -457,7 +459,7 @@ async function sendRyzeMessage(
     .insert({
       account_id: accountId,
       conversation_id: conversationId,
-      sender_type: 'agent',
+    sender_type: effectiveSenderType,
       content_type: messageType,
       content_text: contentText || null,
       media_url: mediaUrl || null,
@@ -681,7 +683,8 @@ async function persistSentMessage(
   params: SendMessageParams,
   provider: string,
 ): Promise<SendMessageResult> {
-  const { messageType, contentText, mediaUrl, templateName, replyToMessageId } = params;
+  const { messageType, contentText, mediaUrl, templateName, replyToMessageId, senderType } = params;
+  const effectiveSenderType = senderType || 'agent';
 
   const channel = (
     await db
@@ -696,7 +699,7 @@ async function persistSentMessage(
     .insert({
       account_id: accountId,
       conversation_id: conversationId,
-      sender_type: 'agent',
+      sender_type: effectiveSenderType,
       content_type: messageType,
       content_text: contentText || null,
       media_url: mediaUrl || null,
