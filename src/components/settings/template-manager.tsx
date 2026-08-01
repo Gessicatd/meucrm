@@ -155,7 +155,7 @@ const TEMPLATE_MODELS: TemplateModel[] = [
     category: 'Utility' as const,
     language: 'pt_BR',
     header_format: 'text' as const,
-    header_content: '👋 Bem-vindo!',
+    header_content: 'Bem-vindo!',
     body_text: 'Olá, {{1}}!\n\nSeja bem-vindo(a) à {{2}}.\n\nRecebemos seu contato e em instantes nossa equipe irá atendê-lo.\n\nEnquanto isso, escolha uma das opções abaixo para agilizar seu atendimento.',
     footer_text: 'Responderemos o mais rápido possível.',
     buttons: [
@@ -170,7 +170,7 @@ const TEMPLATE_MODELS: TemplateModel[] = [
     category: 'Utility' as const,
     language: 'pt_BR',
     header_format: 'text' as const,
-    header_content: '📅 Agendamento',
+    header_content: 'Agendamento',
     body_text: 'Olá, {{1}}!\n\nSeu atendimento foi agendado com sucesso.\n\n📅 Data: {{2}}\n🕒 Horário: {{3}}\n\nCaso precise remarcar, basta responder esta mensagem.',
     footer_text: 'Aguardamos você!',
     buttons: [
@@ -185,7 +185,7 @@ const TEMPLATE_MODELS: TemplateModel[] = [
     category: 'Utility' as const,
     language: 'pt_BR',
     header_format: 'text' as const,
-    header_content: '💳 Pagamento',
+    header_content: 'Pagamento',
     body_text: 'Olá, {{1}}!\n\nIdentificamos que existe um pagamento pendente referente a {{2}}.\n\nValor: R\$ {{3}}\n\nClique no botão abaixo para realizar o pagamento.',
     footer_text: '',
     buttons: [
@@ -214,7 +214,7 @@ const TEMPLATE_MODELS: TemplateModel[] = [
     category: 'Utility' as const,
     language: 'pt_BR',
     header_format: 'text' as const,
-    header_content: '📄 Orçamento',
+    header_content: 'Orcamento',
     body_text: 'Olá, {{1}}!\n\nSeu orçamento já está disponível.\n\nValor estimado: {{2}}\n\nClique no botão abaixo para visualizar todos os detalhes.',
     footer_text: '',
     buttons: [
@@ -228,7 +228,7 @@ const TEMPLATE_MODELS: TemplateModel[] = [
     category: 'Utility' as const,
     language: 'pt_BR',
     header_format: 'text' as const,
-    header_content: '🤖 Assistente Virtual',
+    header_content: 'Assistente Virtual',
     body_text: 'Olá, {{1}}!\n\nSou a assistente virtual da {{2}}.\n\nEstou pronta para entender sua necessidade e encaminhar seu atendimento da forma mais rápida possível.\n\nVamos começar?',
     footer_text: '',
     buttons: [

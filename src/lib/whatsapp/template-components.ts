@@ -27,7 +27,7 @@ export interface MetaComponent {
 }
 
 interface MetaButtonPayload {
-  type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'COPY_CODE';
+  type: 'quick_reply' | 'url' | 'phone_number' | 'copy_code';
   text: string;
   url?: string;
   phone_number?: string;
@@ -86,10 +86,10 @@ function buildFooterComponent(payload: TemplatePayload): MetaComponent | null {
 function buildButtonPayload(b: TemplateButton): MetaButtonPayload {
   switch (b.type) {
     case 'QUICK_REPLY':
-      return { type: 'QUICK_REPLY', text: b.text };
+      return { type: 'quick_reply', text: b.text };
     case 'URL': {
       const payload: MetaButtonPayload = {
-        type: 'URL',
+        type: 'url',
         text: b.text,
         url: b.url,
       };
@@ -97,9 +97,9 @@ function buildButtonPayload(b: TemplateButton): MetaButtonPayload {
       return payload;
     }
     case 'PHONE_NUMBER':
-      return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone_number };
+      return { type: 'phone_number', text: b.text, phone_number: b.phone_number };
     case 'COPY_CODE':
-      return { type: 'COPY_CODE', text: b.text, example: [b.example] };
+      return { type: 'copy_code', text: b.text, example: [b.example] };
   }
 }
 

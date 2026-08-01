@@ -101,10 +101,10 @@ describe('buildMetaTemplatePayload', () => {
     });
     const buttons = payload.components.find((c) => c.type === 'buttons');
     expect(buttons?.buttons).toEqual([
-      { type: 'QUICK_REPLY', text: 'Yes' },
-      { type: 'URL', text: 'Track', url: 'https://x/{{1}}', example: ['abc'] },
-      { type: 'PHONE_NUMBER', text: 'Call', phone_number: '+15551234567' },
-      { type: 'COPY_CODE', text: 'Copy', example: ['SUMMER20'] },
+      { type: 'quick_reply', text: 'Yes' },
+      { type: 'url', text: 'Track', url: 'https://x/{{1}}', example: ['abc'] },
+      { type: 'phone_number', text: 'Call', phone_number: '+15551234567' },
+      { type: 'copy_code', text: 'Copy', example: ['SUMMER20'] },
     ]);
   });
 
