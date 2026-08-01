@@ -6,7 +6,7 @@ import type { ZernioTemplate } from '@/lib/zernio/client'
 import type { TemplateButton, TemplateSampleValues } from '@/types'
 
 function parseButtons(components: ZernioTemplate['components']): TemplateButton[] {
-  const buttonsComp = components?.find((c) => c.type === 'BUTTONS')
+  const buttonsComp = components?.find((c) => c.type?.toUpperCase() === 'BUTTONS')
   if (!buttonsComp?.buttons?.length) return []
   const out: TemplateButton[] = []
   for (const b of buttonsComp.buttons) {
@@ -78,9 +78,9 @@ export async function POST() {
     const errors: { name: string; language: string; message: string }[] = []
 
     for (const t of templates) {
-      const body = t.components?.find((c) => c.type === 'BODY')
-      const header = t.components?.find((c) => c.type === 'HEADER')
-      const footer = t.components?.find((c) => c.type === 'FOOTER')
+      const body = t.components?.find((c) => c.type?.toUpperCase() === 'BODY')
+      const header = t.components?.find((c) => c.type?.toUpperCase() === 'HEADER')
+      const footer = t.components?.find((c) => c.type?.toUpperCase() === 'FOOTER')
 
       const parsedButtons = parseButtons(t.components)
 
