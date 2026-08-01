@@ -249,16 +249,16 @@ export async function sendInboxMessage(
   if (interactive) body.interactive = interactive;
   if (template) body.template = template;
 
-  const data = await zernioFetch<{
-    message: { id: string; conversationId: string };
+  const resp = await zernioFetch<{
+    data: { id: string; conversationId: string };
   }>(`/inbox/conversations/${zernioConversationId}/messages`, {
     method: 'POST',
     body,
   });
 
   return {
-    messageId: data.message.id,
-    conversationId: data.message.conversationId,
+    messageId: resp.data.id,
+    conversationId: resp.data.conversationId,
   };
 }
 
@@ -288,17 +288,16 @@ export async function createInboxConversation(
   if (templateParams?.length) body.templateParams = templateParams;
   if (headerMedia) body.headerMedia = headerMedia;
 
-  const data = await zernioFetch<{
-    message: { id: string };
-    conversation: { id: string };
+  const resp = await zernioFetch<{
+    data: { messageId: string; conversationId: string };
   }>('/inbox/conversations', {
     method: 'POST',
     body,
   });
 
   return {
-    messageId: data.message.id,
-    conversationId: data.conversation.id,
+    messageId: resp.data.messageId,
+    conversationId: resp.data.conversationId,
   };
 }
 
