@@ -121,6 +121,18 @@ interface ZernioWebhookPayload {
     status: string;
     platforms: Array<{ platform: string; accountId: string }>;
   };
+  reaction?: {
+    emoji: string;
+    action: 'added' | 'removed';
+    platformMessageId: string;
+    messageId?: string;
+    sender: {
+      id: string;
+      name: string;
+      phoneNumber: string;
+      contactId: string;
+    };
+  };
 }
 
 // ─── Event Router ───────────────────────────────────────────
@@ -157,6 +169,10 @@ async function processWebhook(body: ZernioWebhookPayload) {
     case 'post.partial':
     case 'post.scheduled':
       if (body.post) await handlePostStatus(body);
+      break;
+
+    case 'reaction.received':
+      if (body.reaction) await handleReactionReceived(body);
       break;
 
     default:
@@ -275,6 +291,8 @@ async function findOrCreateConversation(
   contactId: string,
   channel: string | undefined,
   provider: string | undefined,
+  zernioConversationId?: string,
+  zernioAccountId?: string,
 ): Promise<{ id: string; created: boolean } | null> {
   const db = supabaseAdmin() as any;
 
@@ -287,17 +305,32 @@ async function findOrCreateConversation(
     .eq('provider', provider)
     .maybeSingle()) as { data: { id: string } | null };
 
-  if (existing) return { id: existing.id, created: false };
+  if (existing) {
+    if (zernioConversationId || zernioAccountId) {
+      const updateData: Record<string, unknown> = {};
+      if (zernioConversationId) updateData.zernio_conversation_id = zernioConversationId;
+      if (zernioAccountId) updateData.zernio_account_id = zernioAccountId;
+      await (db as any)
+        .from('conversations')
+        .update(updateData)
+        .eq('id', existing.id);
+    }
+    return { id: existing.id, created: false };
+  }
+
+  const convData: Record<string, unknown> = {
+    account_id: accountId,
+    user_id: userId,
+    contact_id: contactId,
+    channel,
+    provider,
+  };
+  if (zernioConversationId) convData.zernio_conversation_id = zernioConversationId;
+  if (zernioAccountId) convData.zernio_account_id = zernioAccountId;
 
   const { data: newConv, error } = (await db
     .from('conversations')
-    .insert({
-      account_id: accountId,
-      user_id: userId,
-      contact_id: contactId,
-      channel,
-      provider,
-    })
+    .insert(convData)
     .select('id')
     .single()) as { data: { id: string } | null; error: unknown };
 
@@ -342,7 +375,7 @@ async function handleInboundMessage(body: ZernioWebhookPayload) {
         ? 'instagram'
         : undefined;
 
-  const provider = undefined;
+  const provider = 'zernio';
 
   // Create/find contact using sender info
   const phoneNumber = msg.sender.phoneNumber.replace('+', '');
@@ -361,6 +394,8 @@ async function handleInboundMessage(body: ZernioWebhookPayload) {
     contactOutcome.id,
     channel,
     provider,
+    zernioConv.id,
+    acct.accountId,
   );
   if (!convOutcome) return;
 
@@ -537,4 +572,38 @@ async function handlePostStatus(body: ZernioWebhookPayload) {
   console.log(
     `[zernio/webhook] post ${body.event}: ${post.id} (${post.status})`,
   );
+}
+
+async function handleReactionReceived(body: ZernioWebhookPayload) {
+  const reaction = body.reaction!;
+  const acct = body.account!;
+
+  const accountId = await resolveAccountId(acct.accountId, acct.profileId);
+  if (!accountId) return;
+
+  const db = supabaseAdmin() as any;
+
+  if (reaction.messageId) {
+    await db
+      .from('message_reactions')
+      .insert({
+        message_id: reaction.messageId,
+        emoji: reaction.emoji,
+        sender_name: reaction.sender.name,
+        sender_id: reaction.sender.id,
+        action: reaction.action,
+      })
+      .select()
+      .single()
+      .catch(() => {
+        // Dedup — reaction already exists is OK
+      });
+  }
+
+  await dispatchWebhookEvent(db, accountId, 'reaction.received', {
+    zernio_message_id: reaction.messageId,
+    emoji: reaction.emoji,
+    action: reaction.action,
+    platform_message_id: reaction.platformMessageId,
+  });
 }

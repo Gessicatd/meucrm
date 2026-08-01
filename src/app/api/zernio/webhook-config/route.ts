@@ -15,9 +15,17 @@ const ZERNIO_WEBHOOK_URL =
 
 const DEFAULT_EVENTS = [
   'message.received',
-  'comment.received',
-  'post.platform.published',
-  'post.platform.failed',
+  'message.sent',
+  'message.delivered',
+  'message.read',
+  'message.failed',
+  'conversation.started',
+  'reaction.received',
+  'account.connected',
+  'account.disconnected',
+  'post.published',
+  'post.failed',
+  'post.partial',
 ];
 
 export async function GET() {

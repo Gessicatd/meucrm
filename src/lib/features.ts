@@ -40,11 +40,11 @@ export interface WorkspaceFeatureMeta {
 }
 
 export const WORKSPACE_FEATURE_META: Record<WorkspaceFeature, WorkspaceFeatureMeta> = {
-  whatsapp: { key: 'whatsapp', label: 'WhatsApp', icon: PlugZap, description: 'WhatsApp Cloud API configuration' },
-  instagram: { key: 'instagram', label: 'Instagram', icon: Camera, description: 'Instagram Messaging API configuration' },
+  whatsapp: { key: 'whatsapp', label: 'WhatsApp (Legacy)', icon: PlugZap, description: 'Legacy WhatsApp Cloud API (migrate to Social Accounts)' },
+  instagram: { key: 'instagram', label: 'Instagram (Legacy)', icon: Camera, description: 'Legacy Instagram API (migrate to Social Accounts)' },
   ryzeapi: { key: 'ryzeapi', label: 'RyzeAPI', icon: PlugZap, description: 'Self-hosted WhatsApp gateway' },
   calendar: { key: 'calendar', label: 'Google Calendar', icon: Calendar, description: 'Google Calendar integration and sync' },
-  social: { key: 'social', label: 'Social Accounts', icon: Share2, description: 'Zernio social media management' },
+  social: { key: 'social', label: 'Social Accounts', icon: Share2, description: 'Connect WhatsApp, Instagram & more via Zernio' },
   templates: { key: 'templates', label: 'Templates', icon: FileText, description: 'WhatsApp message templates' },
   fields: { key: 'fields', label: 'Fields & tags', icon: Tags, description: 'Custom contact fields and tag management' },
   deals: { key: 'deals', label: 'Deals & currency', icon: Coins, description: 'Pipeline deal settings and default currency' },

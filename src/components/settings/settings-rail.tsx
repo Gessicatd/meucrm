@@ -59,9 +59,12 @@ export function SettingsRail({
         const allItems = SETTINGS_SECTIONS.filter(
           (s) => SECTION_META[s].group === group,
         );
+        const visibleItems = allItems.filter(
+          (s) => !SECTION_META[s].hidden,
+        );
         const items = enabledFeatures && group === 'workspace'
-          ? allItems.filter((s) => enabledFeatures.has(s))
-          : allItems;
+          ? visibleItems.filter((s) => enabledFeatures.has(s))
+          : visibleItems;
         return (
           <div
             key={group}

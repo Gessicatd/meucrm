@@ -8,6 +8,32 @@ if (!ZERNIO_API_KEY) {
   );
 }
 
+async function zernioFetch<T>(
+  path: string,
+  options?: { method?: string; body?: unknown },
+): Promise<T> {
+  const url = `${ZERNIO_BASE}${path}`;
+  const response = await fetch(url, {
+    method: options?.method ?? 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ZERNIO_API_KEY}`,
+    },
+    body: options?.body ? JSON.stringify(options.body) : undefined,
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(
+      `Zernio API error (${response.status}): ${data.error ?? response.statusText}`,
+    );
+  }
+
+  return response.json();
+}
+
+// ─── Types ──────────────────────────────────────────────────
+
 export interface ZernioProfile {
   _id: string;
   name: string;
@@ -49,28 +75,39 @@ export interface ZernioInboxMessage {
   createdAt: string;
 }
 
-async function zernioFetch<T>(
-  path: string,
-  options?: { method?: string; body?: unknown },
-): Promise<T> {
-  const url = `${ZERNIO_BASE}${path}`;
-  const response = await fetch(url, {
-    method: options?.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${ZERNIO_API_KEY}`,
-    },
-    body: options?.body ? JSON.stringify(options.body) : undefined,
-  });
+export interface ZernioPost {
+  _id: string;
+  content: string;
+  status: 'draft' | 'scheduled' | 'published' | 'failed' | 'partial';
+  scheduledFor: string | null;
+  platforms: { platform: string; accountId: string; status: string }[];
+  createdAt: string;
+}
 
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(
-      `Zernio API error (${response.status}): ${data.error ?? response.statusText}`,
-    );
-  }
+export interface ZernioWebhookConfig {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  isActive: boolean;
+  createdAt: string;
+  lastDeliveryAt?: string;
+  lastDeliveryStatus?: string;
+  failureCount: number;
+}
 
-  return response.json();
+export interface ZernioTemplate {
+  name: string;
+  category: string;
+  language: string;
+  status: string;
+  components: Array<{
+    type: string;
+    text?: string;
+    format?: string;
+    buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string }>;
+  }>;
+  id?: string;
 }
 
 // ─── Profiles ───────────────────────────────────────────────
@@ -87,9 +124,7 @@ export async function createProfile(args: {
   return data.profile;
 }
 
-export async function getProfile(
-  profileId: string,
-): Promise<ZernioProfile> {
+export async function getProfile(profileId: string): Promise<ZernioProfile> {
   const data = await zernioFetch<{ profile: ZernioProfile }>(
     `/profiles/${profileId}`,
   );
@@ -114,9 +149,7 @@ export async function updateProfile(args: {
   return data.profile;
 }
 
-export async function deleteProfile(
-  profileId: string,
-): Promise<void> {
+export async function deleteProfile(profileId: string): Promise<void> {
   await zernioFetch(`/profiles/${profileId}`, { method: 'DELETE' });
 }
 
@@ -137,9 +170,7 @@ export async function listSocialAccounts(
   return data.accounts;
 }
 
-export async function disconnectSocialAccount(
-  accountId: string,
-): Promise<void> {
+export async function disconnectSocialAccount(accountId: string): Promise<void> {
   await zernioFetch(`/accounts/${accountId}`, { method: 'DELETE' });
 }
 
@@ -161,55 +192,176 @@ export async function getPlatformAuthUrl(args: {
   return { authUrl: data.authUrl };
 }
 
-// ─── Inbox ──────────────────────────────────────────────────
+// ─── Inbox — Send Messages ──────────────────────────────────
+
+export interface SendMessageArgs {
+  zernioConversationId: string;
+  zernioAccountId: string;
+  text?: string;
+  attachmentUrl?: string;
+  attachmentType?: 'image' | 'video' | 'audio' | 'file';
+  attachmentName?: string;
+  voiceNote?: boolean;
+  buttons?: Array<{ title: string; payload: string }>;
+  interactive?: {
+    type: 'list' | 'cta_url' | 'flow' | 'location_request_message';
+    header?: { type: 'text'; text: string };
+    body: { text: string };
+    footer?: { text: string };
+    action: Record<string, unknown>;
+  };
+  template?: {
+    elements: Array<{
+      name: string;
+      language: string;
+      components?: Array<{
+        type: string;
+        parameters?: Array<{ type: string; text?: string }>;
+      }>;
+    }>;
+  };
+}
+
+export async function sendInboxMessage(
+  args: SendMessageArgs,
+): Promise<{ messageId: string; conversationId: string }> {
+  const {
+    zernioConversationId,
+    zernioAccountId,
+    text,
+    attachmentUrl,
+    attachmentType,
+    attachmentName,
+    voiceNote,
+    buttons,
+    interactive,
+    template,
+  } = args;
+
+  const body: Record<string, unknown> = { accountId: zernioAccountId };
+
+  if (text) body.message = text;
+  if (attachmentUrl) body.attachmentUrl = attachmentUrl;
+  if (attachmentType) body.attachmentType = attachmentType;
+  if (attachmentName) body.attachmentName = attachmentName;
+  if (voiceNote !== undefined) body.voiceNote = voiceNote;
+  if (buttons) body.buttons = buttons;
+  if (interactive) body.interactive = interactive;
+  if (template) body.template = template;
+
+  const data = await zernioFetch<{
+    message: { id: string; conversationId: string };
+  }>(`/inbox/conversations/${zernioConversationId}/messages`, {
+    method: 'POST',
+    body,
+  });
+
+  return {
+    messageId: data.message.id,
+    conversationId: data.message.conversationId,
+  };
+}
+
+// ─── Inbox — Create Conversation (WhatsApp template outside 24h) ─
+
+export interface CreateConversationArgs {
+  zernioAccountId: string;
+  participantId: string;
+  templateName: string;
+  templateLanguage?: string;
+  templateParams?: string[];
+  headerMedia?: string;
+}
+
+export async function createInboxConversation(
+  args: CreateConversationArgs,
+): Promise<{ messageId: string; conversationId: string }> {
+  const { zernioAccountId, participantId, templateName, templateLanguage, templateParams, headerMedia } = args;
+
+  const body: Record<string, unknown> = {
+    accountId: zernioAccountId,
+    participantId,
+    templateName,
+  };
+
+  if (templateLanguage) body.templateLanguage = templateLanguage;
+  if (templateParams?.length) body.templateParams = templateParams;
+  if (headerMedia) body.headerMedia = headerMedia;
+
+  const data = await zernioFetch<{
+    message: { id: string };
+    conversation: { id: string };
+  }>('/inbox/conversations', {
+    method: 'POST',
+    body,
+  });
+
+  return {
+    messageId: data.message.id,
+    conversationId: data.conversation.id,
+  };
+}
+
+// ─── Inbox — Reactions ──────────────────────────────────────
+
+export async function sendReaction(args: {
+  zernioConversationId: string;
+  zernioAccountId: string;
+  messageId: string;
+  emoji: string;
+}): Promise<void> {
+  const { zernioConversationId, zernioAccountId, messageId, emoji } = args;
+  await zernioFetch(
+    `/inbox/conversations/${zernioConversationId}/messages/${messageId}/reactions`,
+    {
+      method: 'POST',
+      body: { accountId: zernioAccountId, emoji },
+    },
+  );
+}
+
+// ─── Inbox — List ───────────────────────────────────────────
 
 export async function listInboxConversations(args: {
-  accountId: string;
+  profileId?: string;
+  platform?: string;
 }): Promise<ZernioInboxConversation[]> {
-  const { accountId } = args;
+  const params = new URLSearchParams();
+  if (args.profileId) params.set('profileId', args.profileId);
+  if (args.platform) params.set('platform', args.platform);
+  const qs = params.toString();
   const data = await zernioFetch<{ conversations: ZernioInboxConversation[] }>(
-    `/inbox/accounts/${accountId}/conversations`,
+    `/inbox/conversations${qs ? `?${qs}` : ''}`,
   );
   return data.conversations;
 }
 
-export async function sendInboxMessage(args: {
-  conversationId: string;
-  accountId: string;
-  message: string;
-}): Promise<ZernioInboxMessage> {
-  const { conversationId, accountId, message } = args;
-  const data = await zernioFetch<{ message: ZernioInboxMessage }>(
-    `/inbox/conversations/${conversationId}/messages`,
-    {
-      method: 'POST',
-      body: { accountId, message },
-    },
-  );
-  return data.message;
-}
-
 // ─── Posts ──────────────────────────────────────────────────
 
-export interface ZernioPost {
-  _id: string;
+export async function createPost(args: {
   content: string;
-  status: 'draft' | 'scheduled' | 'published' | 'failed' | 'partial';
-  scheduledFor: string | null;
-  platforms: { platform: string; accountId: string; status: string }[];
-  createdAt: string;
-}
+  platforms: { platform: string; accountId: string; customContent?: string }[];
+  scheduledFor?: string;
+  timezone?: string;
+  publishNow?: boolean;
+  isDraft?: boolean;
+  mediaItems?: { type: string; url: string }[];
+}): Promise<ZernioPost> {
+  const body: Record<string, unknown> = {
+    content: args.content,
+    platforms: args.platforms,
+  };
+  if (args.scheduledFor) body.scheduledFor = args.scheduledFor;
+  if (args.timezone) body.timezone = args.timezone;
+  if (args.publishNow !== undefined) body.publishNow = args.publishNow;
+  if (args.isDraft !== undefined) body.isDraft = args.isDraft;
+  if (args.mediaItems) body.mediaItems = args.mediaItems;
 
-export interface ZernioWebhookConfig {
-  id: string;
-  name: string;
-  url: string;
-  events: string[];
-  isActive: boolean;
-  createdAt: string;
-  lastDeliveryAt?: string;
-  lastDeliveryStatus?: string;
-  failureCount: number;
+  const data = await zernioFetch<{ post: ZernioPost }>('/posts', {
+    method: 'POST',
+    body,
+  });
+  return data.post;
 }
 
 // ─── Webhooks ───────────────────────────────────────────────
@@ -258,28 +410,50 @@ export async function findWacrmWebhook(
   return webhooks.find((w) => w.url === webhookUrl) ?? null;
 }
 
-export async function createPost(args: {
-  content: string;
-  platforms: { platform: string; accountId: string; customContent?: string }[];
-  scheduledFor?: string;
-  timezone?: string;
-  publishNow?: boolean;
-  isDraft?: boolean;
-  mediaItems?: { type: string; url: string }[];
-}): Promise<ZernioPost> {
-  const body: Record<string, unknown> = {
-    content: args.content,
-    platforms: args.platforms,
-  };
-  if (args.scheduledFor) body.scheduledFor = args.scheduledFor;
-  if (args.timezone) body.timezone = args.timezone;
-  if (args.publishNow !== undefined) body.publishNow = args.publishNow;
-  if (args.isDraft !== undefined) body.isDraft = args.isDraft;
-  if (args.mediaItems) body.mediaItems = args.mediaItems;
+// ─── Templates ──────────────────────────────────────────────
 
-  const data = await zernioFetch<{ post: ZernioPost }>('/posts', {
-    method: 'POST',
-    body,
-  });
-  return data.post;
+export async function listTemplates(accountId: string): Promise<ZernioTemplate[]> {
+  const data = await zernioFetch<{ templates: ZernioTemplate[] }>(
+    `/whatsapp/templates?accountId=${encodeURIComponent(accountId)}`,
+  );
+  return data.templates;
+}
+
+export async function getTemplate(
+  accountId: string,
+  templateName: string,
+): Promise<ZernioTemplate> {
+  const data = await zernioFetch<{ template: ZernioTemplate }>(
+    `/whatsapp/templates/${encodeURIComponent(templateName)}?accountId=${encodeURIComponent(accountId)}`,
+  );
+  return data.template;
+}
+
+export async function createTemplate(args: {
+  accountId: string;
+  name: string;
+  category: string;
+  language: string;
+  components: Array<{
+    type: string;
+    text?: string;
+    format?: string;
+    buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string }>;
+  }>;
+}): Promise<ZernioTemplate> {
+  const data = await zernioFetch<{ template: ZernioTemplate }>(
+    '/whatsapp/templates',
+    { method: 'POST', body: args },
+  );
+  return data.template;
+}
+
+export async function deleteTemplate(
+  accountId: string,
+  templateName: string,
+): Promise<void> {
+  await zernioFetch(
+    `/whatsapp/templates/${encodeURIComponent(templateName)}?accountId=${encodeURIComponent(accountId)}`,
+    { method: 'DELETE' },
+  );
 }

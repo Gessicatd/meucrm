@@ -56,6 +56,8 @@ export interface SectionMeta {
   label: string;
   icon: LucideIcon;
   group: 'top' | 'account' | 'workspace';
+  /** Hide from the rail (keeps deep-link support for existing URLs). */
+  hidden?: boolean;
 }
 
 export const SECTION_META: Record<SettingsSection, SectionMeta> = {
@@ -63,8 +65,8 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   profile: { id: 'profile', label: 'Your profile', icon: User, group: 'account' },
   security: { id: 'security', label: 'Login & security', icon: Shield, group: 'account' },
   appearance: { id: 'appearance', label: 'Appearance', icon: Palette, group: 'account' },
-  whatsapp: { id: 'whatsapp', label: 'WhatsApp', icon: PlugZap, group: 'workspace' },
-  instagram: { id: 'instagram', label: 'Instagram', icon: Camera, group: 'workspace' },
+  whatsapp: { id: 'whatsapp', label: 'WhatsApp (Legacy)', icon: PlugZap, group: 'workspace', hidden: true },
+  instagram: { id: 'instagram', label: 'Instagram (Legacy)', icon: Camera, group: 'workspace', hidden: true },
   ryzeapi: { id: 'ryzeapi', label: 'RyzeAPI', icon: PlugZap, group: 'workspace' },
   calendar: { id: 'calendar', label: 'Google Calendar', icon: Calendar, group: 'workspace' },
   social: { id: 'social', label: 'Social Accounts', icon: Share2, group: 'workspace' },
@@ -96,6 +98,7 @@ function isSection(value: string | null): value is SettingsSection {
  */
 export function resolveSection(raw: string | null): SettingsSection {
   if (raw === 'tags' || raw === 'custom-fields') return 'fields';
+  if (raw === 'whatsapp' || raw === 'instagram') return 'social';
   if (isSection(raw)) return raw;
   return DEFAULT_SECTION;
 }
