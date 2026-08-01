@@ -726,7 +726,7 @@ export function TemplateManager() {
                   <Select
                     value={form.language}
                     onValueChange={(val) =>
-                      setForm({ ...form, language: val })
+                      setForm({ ...form, language: val ?? 'en_US' })
                     }
                   >
                     <SelectTrigger className="w-full bg-muted border-border text-foreground">
