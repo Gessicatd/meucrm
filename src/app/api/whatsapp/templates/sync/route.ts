@@ -21,7 +21,7 @@ function parseButtons(components: ZernioTemplate['components']): TemplateButton[
         out.push({ type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone_number ?? '' })
         break
       case 'COPY_CODE':
-        out.push({ type: 'COPY_CODE', text: b.text })
+        out.push({ type: 'COPY_CODE', text: b.text, example: '' })
         break
     }
   }
