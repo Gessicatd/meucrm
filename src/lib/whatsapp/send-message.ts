@@ -459,7 +459,7 @@ async function sendRyzeMessage(
     .insert({
       account_id: accountId,
       conversation_id: conversationId,
-    sender_type: effectiveSenderType,
+    sender_type: 'agent',
       content_type: messageType,
       content_text: contentText || null,
       media_url: mediaUrl || null,
@@ -723,7 +723,7 @@ async function persistSentMessage(
   void dispatchWebhookEvent(supabaseAdmin(), accountId, 'message.sent', {
     conversation_id: conversationId,
     message_id: messageRecord.id,
-    sender_type: 'agent',
+    sender_type: effectiveSenderType,
     content_type: messageType,
     text: contentText || null,
     channel,
