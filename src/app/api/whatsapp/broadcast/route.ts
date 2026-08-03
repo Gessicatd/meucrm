@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         for (const nr of newRecipients) {
           const p = (typeof nr.phone === 'string' ? nr.phone : '').replace(/[^\d]/g, '')
           if (p) {
-            paramsByPhone.set(p, Array.isArray(nr.params) ? nr.params.filter((v): v is string => typeof v === 'string') : [])
+            paramsByPhone.set(p, Array.isArray(nr.params) ? nr.params.filter((v: unknown): v is string => typeof v === 'string') : [])
           }
         }
       }
