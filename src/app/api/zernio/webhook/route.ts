@@ -136,15 +136,16 @@ interface ZernioWebhookPayload {
   };
   comment?: {
     id: string;
-    from: {
+    author?: {
       id: string;
       username: string;
     };
     text?: string;
-    media: {
-      id: string;
-    };
     createdAt?: string;
+  };
+  post?: {
+    id?: string;
+    platformPostId: string;
   };
 }
 
@@ -777,11 +778,16 @@ async function handleCommentReceived(body: ZernioWebhookPayload) {
     .maybeSingle();
   const userId = profile?.user_id ?? accountId;
 
-  const senderInstagramId = comment.from.id;
-  const senderUsername = comment.from.username;
+  const senderInstagramId = comment.author?.id ?? '';
+  const senderUsername = comment.author?.username ?? '';
   const commentText = comment.text ?? '';
-  const mediaId = comment.media?.id ?? '';
+  const mediaId = body.post?.platformPostId ?? '';
   const commentId = comment.id;
+
+  if (!senderInstagramId) {
+    console.warn('[zernio/webhook] comment missing author id, skipping');
+    return;
+  }
 
   // Find or create contact by instagram_id
   let contact: { id: string; wasCreated: boolean } | null = null;
