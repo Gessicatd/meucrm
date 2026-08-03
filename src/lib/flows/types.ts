@@ -239,6 +239,9 @@ export interface KeywordTriggerConfig {
   keywords: string[];
   match_type?: "exact" | "contains";
   case_sensitive?: boolean;
+  /** Instagram media (post) IDs to limit this trigger to. When empty
+   *  or undefined, fires on messages/comments from any post. */
+  instagram_media_ids?: string[];
 }
 
 // No knobs in v1 — the trigger has a single semantic. Kept as a type
@@ -357,6 +360,8 @@ export type ParsedInbound =
       text: string;
       /** Meta's `messages[0].id` — used for idempotency. */
       meta_message_id: string;
+      /** Optional Instagram media (post) ID from a comment event. */
+      instagram_media_id?: string;
     }
   | {
       kind: "interactive_reply";
@@ -383,6 +388,9 @@ export interface DispatchInboundInput {
   /** WhatsApp provider. Used to filter flows scoped to a specific
    *  WhatsApp provider (NULL = both). Ignored for Instagram. */
   provider?: 'meta' | 'ryzeapi' | 'zernio';
+  /** Instagram media (post) ID when the event is a comment on a post.
+   *  Used by keyword triggers with instagram_media_ids filtering. */
+  instagram_media_id?: string;
 }
 
 export interface DispatchInboundResult {

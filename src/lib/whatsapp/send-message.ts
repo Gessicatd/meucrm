@@ -675,6 +675,25 @@ async function sendZernioMessage(
       });
       zernioMsgId = result.messageId;
     } else {
+      if (!resolvedConvId) {
+        const phone = contact?.phone || contact?.instagram_id || '';
+        if (!phone) {
+          throw new SendMessageError(
+            'bad_request',
+            'Cannot send message: no participant identifier (phone or instagram_id) for this contact.',
+            400,
+          );
+        }
+        const result = await createInboxConversation({
+          zernioAccountId: resolvedAcctId,
+          participantId: phone,
+          templateName: templateName || 'hello_world',
+          templateLanguage: templateLanguage || 'en_US',
+        });
+        zernioMsgId = result.messageId;
+        zernioConvResultId = result.conversationId;
+        resolvedConvId = result.conversationId;
+      }
       const result = await sendInboxMessage({
         zernioConversationId: resolvedConvId!,
         zernioAccountId: resolvedAcctId,

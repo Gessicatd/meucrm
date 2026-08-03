@@ -101,18 +101,26 @@ export function matchReplyId(
 export function matchesKeywordTrigger(
   text: string,
   cfg: KeywordTriggerConfig,
+  currentInstagramMediaId?: string,
 ): boolean {
   if (!text || !cfg.keywords?.length) return false;
   const matchType = cfg.match_type ?? "contains";
   const haystack = cfg.case_sensitive ? text : text.toLowerCase();
+  let keywordMatch = false;
   for (const raw of cfg.keywords) {
     if (!raw) continue;
     const needle = cfg.case_sensitive ? raw : raw.toLowerCase();
     if (matchType === "exact" ? haystack === needle : haystack.includes(needle)) {
-      return true;
+      keywordMatch = true;
+      break;
     }
   }
-  return false;
+  if (!keywordMatch) return false;
+  if (cfg.instagram_media_ids?.length) {
+    if (!currentInstagramMediaId) return false;
+    return cfg.instagram_media_ids.includes(currentInstagramMediaId);
+  }
+  return true;
 }
 
 /** Nodes that advance to a next_node_key without waiting for input. */
@@ -323,6 +331,7 @@ async function findEntryFlow(
   isFirstInbound: boolean,
   channel?: 'whatsapp' | 'instagram',
   provider?: 'meta' | 'ryzeapi' | 'zernio',
+  instagramMediaId?: string,
 ): Promise<FlowRow | null> {
   // Only text messages can match an entry trigger. Interactive replies
   // are responses to existing prompts; they never start a new flow.
@@ -357,6 +366,7 @@ async function findEntryFlow(
       if (matchesKeywordTrigger(
         message.text,
         flow.trigger_config as KeywordTriggerConfig,
+        instagramMediaId,
       )) {
         return flow;
       }
@@ -977,6 +987,8 @@ export async function dispatchInboundToFlows(
     }
 
     // No active run → look for a flow whose entry trigger matches.
+    const instagramMediaId = input.instagram_media_id
+      ?? (input.message.kind === 'text' ? input.message.instagram_media_id : undefined);
     const flow = await findEntryFlow(
       db,
       input.accountId,
@@ -984,6 +996,7 @@ export async function dispatchInboundToFlows(
       input.isFirstInboundMessage,
       input.channel,
       input.provider,
+      instagramMediaId,
     );
     if (!flow || !flow.entry_node_id) {
       return { consumed: false, outcome: "no_match" };

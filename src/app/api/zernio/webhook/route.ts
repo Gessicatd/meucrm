@@ -134,6 +134,18 @@ interface ZernioWebhookPayload {
       contactId: string;
     };
   };
+  comment?: {
+    id: string;
+    from: {
+      id: string;
+      username: string;
+    };
+    text?: string;
+    media: {
+      id: string;
+    };
+    createdAt?: string;
+  };
 }
 
 // ─── Event Router ───────────────────────────────────────────
@@ -174,6 +186,10 @@ async function processWebhook(body: ZernioWebhookPayload) {
 
     case 'reaction.received':
       if (body.reaction) await handleReactionReceived(body);
+      break;
+
+    case 'comment.received':
+      if (body.comment) await handleCommentReceived(body);
       break;
 
     default:
@@ -690,5 +706,206 @@ async function handleReactionReceived(body: ZernioWebhookPayload) {
     emoji: reaction.emoji,
     action: reaction.action,
     platform_message_id: reaction.platformMessageId,
+  });
+}
+
+// ─── Comment Received Handler ───────────────────────────────
+
+async function handleCommentReceived(body: ZernioWebhookPayload) {
+  const comment = body.comment!;
+  const acct = body.account!;
+
+  const accountId = await resolveAccountId(acct.accountId, acct.profileId);
+  if (!accountId) {
+    console.warn('[zernio/webhook] no WACRM account found for comment', acct.accountId);
+    return;
+  }
+
+  const db = supabaseAdmin() as any;
+  const { data: profile } = await db
+    .from('profiles')
+    .select('user_id')
+    .eq('account_id', accountId)
+    .limit(1)
+    .maybeSingle();
+  const userId = profile?.user_id ?? accountId;
+
+  const senderInstagramId = comment.from.id;
+  const senderUsername = comment.from.username;
+  const commentText = comment.text ?? '';
+  const mediaId = comment.media?.id ?? '';
+  const commentId = comment.id;
+
+  // Find or create contact by instagram_id
+  let contact: { id: string; wasCreated: boolean } | null = null;
+  const { data: existingContact } = await db
+    .from('contacts')
+    .select('id, name, instagram_username')
+    .eq('account_id', accountId)
+    .eq('instagram_id', senderInstagramId)
+    .maybeSingle();
+
+  if (existingContact) {
+    contact = { id: existingContact.id, wasCreated: false };
+    // Possibly update username/avatar
+    const updates: Record<string, unknown> = {};
+    if (senderUsername && !existingContact.instagram_username) {
+      updates.instagram_username = senderUsername;
+    }
+    if (Object.keys(updates).length > 0) {
+      await db.from('contacts').update(updates).eq('id', existingContact.id);
+    }
+  } else {
+    const { data: newContact, error: createErr } = await db
+      .from('contacts')
+      .insert({
+        account_id: accountId,
+        user_id: userId,
+        instagram_id: senderInstagramId,
+        instagram_username: senderUsername || null,
+        name: senderUsername || senderInstagramId,
+      })
+      .select('id')
+      .single();
+
+    if (createErr || !newContact) {
+      console.error('[zernio/webhook] comment: failed to create contact', createErr);
+      return;
+    }
+    contact = { id: newContact.id, wasCreated: true };
+  }
+
+  // Find or create conversation (channel=instagram, provider=zernio)
+  let conversation: { id: string; created: boolean } | null = null;
+  const { data: existingConv } = await db
+    .from('conversations')
+    .select('id, unread_count')
+    .eq('account_id', accountId)
+    .eq('contact_id', contact.id)
+    .eq('channel', 'instagram')
+    .eq('provider', 'zernio')
+    .maybeSingle();
+
+  if (existingConv) {
+    conversation = { id: existingConv.id, created: false };
+    // Update unread
+    await db.from('conversations').update({
+      unread_count: (existingConv.unread_count ?? 0) + 1,
+      last_message_text: `Comment: ${commentText}`.substring(0, 512),
+      last_message_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      zernio_account_id: acct.accountId,
+    }).eq('id', existingConv.id);
+  } else {
+    const { data: newConv, error: convErr } = await db
+      .from('conversations')
+      .insert({
+        account_id: accountId,
+        user_id: userId,
+        contact_id: contact.id,
+        channel: 'instagram',
+        provider: 'zernio',
+        zernio_account_id: acct.accountId,
+        status: 'open',
+        unread_count: 1,
+        last_message_text: `Comment: ${commentText}`.substring(0, 512),
+        last_message_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (convErr || !newConv) {
+      console.error('[zernio/webhook] comment: failed to create conversation', convErr);
+      return;
+    }
+    conversation = { id: newConv.id, created: true };
+  }
+
+  if (conversation.created) {
+    await dispatchWebhookEvent(db, accountId, 'conversation.created', {
+      conversation_id: conversation.id,
+      contact_id: contact.id,
+      channel: 'instagram',
+      provider: 'zernio',
+    });
+  }
+
+  // Dedup by comment id
+  const msgId = `ig_comment_${commentId}`;
+  const { count: existingMsgCount } = await db
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversation.id)
+    .eq('message_id', msgId);
+
+  if (existingMsgCount && existingMsgCount > 0) {
+    console.log(`[zernio/webhook] deduplicated comment ${commentId}`);
+    return;
+  }
+
+  // Insert the comment as an inbound message
+  const contentText = `Comment: ${commentText}`;
+  const { error: msgErr } = await db.from('messages').insert({
+    account_id: accountId,
+    conversation_id: conversation.id,
+    sender_type: 'customer',
+    content_type: 'text',
+    content_text: contentText,
+    message_id: msgId,
+    instagram_comment_id: commentId,
+    instagram_media_id: mediaId,
+    status: 'delivered',
+    created_at: comment.createdAt || new Date().toISOString(),
+  });
+
+  if (msgErr) {
+    console.error('[zernio/webhook] comment: failed to insert message', msgErr);
+    return;
+  }
+
+  // Dispatch to flows (channel=instagram, provider=zernio)
+  const flowResult = await dispatchInboundToFlows({
+    accountId,
+    userId,
+    contactId: contact.id,
+    conversationId: conversation.id,
+    channel: 'instagram',
+    provider: 'zernio',
+    message: { kind: 'text', text: commentText, meta_message_id: msgId, instagram_media_id: mediaId },
+    isFirstInboundMessage: contact.wasCreated,
+    instagram_media_id: mediaId,
+  });
+
+  if (!flowResult.consumed) {
+    // Dispatch to automations (keyword_match trigger with instagram_media_id context)
+    runAutomationsForTrigger({
+      accountId,
+      triggerType: 'keyword_match',
+      contactId: contact.id,
+      channel: 'instagram',
+      context: {
+        message_text: commentText,
+        conversation_id: conversation.id,
+        instagram_media_id: mediaId,
+      },
+    }).catch((err) => console.error('[zernio comment automations] dispatch failed:', err));
+
+    // AI auto-reply
+    await dispatchInboundToAiReply({
+      accountId,
+      conversationId: conversation.id,
+      contactId: contact.id,
+      configOwnerUserId: userId,
+    });
+  }
+
+  await dispatchWebhookEvent(db, accountId, 'comment.received', {
+    conversation_id: conversation.id,
+    contact_id: contact.id,
+    zernio_comment_id: commentId,
+    instagram_media_id: mediaId,
+    text: commentText,
+    channel: 'instagram',
+    provider: 'zernio',
   });
 }
