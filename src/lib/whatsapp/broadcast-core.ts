@@ -33,6 +33,17 @@ interface PlannedRecipient {
   params: string[]
 }
 
+export interface BroadcastDeliveryResult {
+  phone: string
+  status: 'sent' | 'failed'
+  whatsapp_message_id?: string
+  error?: string
+}
+
+export interface BroadcastDeliveryOutcome {
+  results: BroadcastDeliveryResult[]
+}
+
 export interface BroadcastPlan {
   broadcastId: string
   templateName: string
@@ -136,19 +147,20 @@ export async function createBroadcast(
  * Deliver a broadcast by sending template messages to each recipient
  * via Zernio (or RyzeAPI). The `sendMessageToConversation` function
  * routes through the configured provider.
+ *
+ * Returns per-recipient results so the caller can update statuses.
  */
 export async function deliverBroadcast(
   db: SupabaseClient,
   accountId: string,
   auditUserId: string,
   plan: BroadcastPlan,
-): Promise<void> {
-  let sentCount = 0
+): Promise<BroadcastDeliveryOutcome> {
+  const results: BroadcastDeliveryResult[] = []
 
   for (const recipient of plan.planned) {
     let convId: string | null = null
 
-    // Find or create a conversation for this contact
     const { data: existingConv } = await db
       .from('conversations')
       .select('id')
@@ -176,10 +188,7 @@ export async function deliverBroadcast(
     }
 
     if (!convId) {
-      await db
-        .from('broadcast_recipients')
-        .update({ status: 'failed', error_message: 'Failed to create conversation' })
-        .eq('id', recipient.recipientRowId)
+      results.push({ phone: recipient.phone, status: 'failed', error: 'Failed to create conversation' })
       continue
     }
 
@@ -193,33 +202,16 @@ export async function deliverBroadcast(
         senderType: 'bot',
       })
 
-      sentCount++
-      await db
-        .from('broadcast_recipients')
-        .update({
-          status: 'sent',
-          sent_at: new Date().toISOString(),
-          whatsapp_message_id: result.whatsappMessageId,
-          error_message: null,
-        })
-        .eq('id', recipient.recipientRowId)
+      results.push({
+        phone: recipient.phone,
+        status: 'sent',
+        whatsapp_message_id: result.whatsappMessageId,
+      })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
-      await db
-        .from('broadcast_recipients')
-        .update({
-          status: 'failed',
-          error_message: msg,
-        })
-        .eq('id', recipient.recipientRowId)
+      results.push({ phone: recipient.phone, status: 'failed', error: msg })
     }
   }
 
-  await db
-    .from('broadcasts')
-    .update({
-      status: sentCount > 0 ? 'sent' : 'failed',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', plan.broadcastId)
+  return { results }
 }

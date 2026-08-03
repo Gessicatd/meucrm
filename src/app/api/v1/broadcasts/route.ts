@@ -75,9 +75,21 @@ export async function POST(request: Request) {
     });
 
     // Fan out after the response is sent. Uses the same service-role
-    // client — no request-scoped auth needed for the Meta calls or
+    // client — no request-scoped auth needed for the Zernio calls or
     // the account-scoped row updates.
-    after(() => deliverBroadcast(ctx.supabase, ctx.accountId, auditUserId, plan));
+    after(async () => {
+      const outcome = await deliverBroadcast(ctx.supabase, ctx.accountId, auditUserId, plan)
+      const sent = outcome.results.filter((r) => r.status === 'sent').length
+      await ctx.supabase
+        .from('broadcasts')
+        .update({
+          status: sent > 0 ? 'sent' : 'failed',
+          sent_count: sent,
+          failed_count: outcome.results.length - sent,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', plan.broadcastId)
+    });
 
     return ok(
       {

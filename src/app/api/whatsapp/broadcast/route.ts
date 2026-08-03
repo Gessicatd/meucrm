@@ -1,4 +1,4 @@
-import { NextResponse, after } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import {
   createBroadcast,
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       })),
     })
 
-    after(() => deliverBroadcast(supabase, accountId, user.id, plan))
+    const outcome = await deliverBroadcast(supabase, accountId, user.id, plan)
 
     return NextResponse.json({
       success: true,
@@ -92,6 +92,7 @@ export async function POST(request: Request) {
       total: plan.planned.length + plan.rejected,
       accepted: plan.planned.length,
       rejected: plan.rejected,
+      results: outcome.results,
     })
   } catch (error) {
     if (error instanceof BroadcastError) {
