@@ -4,6 +4,7 @@ import {
   createBroadcast,
   deliverBroadcast,
   BroadcastError,
+  type BroadcastPlan,
 } from '@/lib/whatsapp/broadcast-core'
 import {
   checkRateLimit,
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     const {
+      broadcast_id,
       recipients: newRecipients,
       phone_numbers,
       template_name,
@@ -57,32 +59,90 @@ export async function POST(request: Request) {
       template_params,
     } = body
 
-    let recipients: NewRecipient[]
-    if (Array.isArray(newRecipients) && newRecipients.length > 0) {
-      recipients = newRecipients
-    } else if (Array.isArray(phone_numbers) && phone_numbers.length > 0) {
-      const shared: string[] = Array.isArray(template_params) ? template_params : []
-      recipients = phone_numbers.map((phone: string) => ({ phone, params: shared }))
-    } else {
-      return NextResponse.json(
-        { error: 'Provide either `recipients` (preferred) or `phone_numbers` — must be a non-empty array' },
-        { status: 400 },
-      )
-    }
-
     if (!template_name) {
       return NextResponse.json({ error: 'template_name is required' }, { status: 400 })
     }
 
-    const plan = await createBroadcast(supabase, accountId, user.id, {
-      name: null,
-      templateName: template_name,
-      templateLanguage: template_language,
-      recipients: recipients.map((r) => ({
-        to: typeof r.phone === 'string' ? r.phone : '',
-        params: r.params,
-      })),
-    })
+    let plan: BroadcastPlan
+
+    if (typeof broadcast_id === 'string' && broadcast_id) {
+      // Reuse an existing broadcast created by the frontend — avoids
+      // duplicate broadcasts/recipients rows.
+      const { data: existing, error: brErr } = await supabase
+        .from('broadcasts')
+        .select('id, template_name, template_language')
+        .eq('id', broadcast_id)
+        .eq('account_id', accountId)
+        .single()
+
+      if (brErr || !existing) {
+        return NextResponse.json({ error: 'Broadcast not found' }, { status: 404 })
+      }
+
+      const { data: recipients } = await supabase
+        .from('broadcast_recipients')
+        .select('id, contact:contacts(phone)')
+        .eq('broadcast_id', broadcast_id)
+
+      if (!recipients?.length) {
+        return NextResponse.json({ error: 'Broadcast has no recipients' }, { status: 400 })
+      }
+
+      const planned: {
+        recipientRowId: string
+        phone: string
+        contactId: string
+        params: string[]
+      }[] = []
+
+      for (const r of recipients) {
+        // PostgREST nested select returns contact as array for to-one joins
+        const contact = Array.isArray(r.contact) ? r.contact[0] : r.contact
+        const phone = (contact?.phone || '').replace(/[^\d]/g, '')
+        if (!phone) continue
+        planned.push({
+          recipientRowId: r.id as string,
+          phone,
+          contactId: contact?.id ?? '',
+          params: [],
+        })
+      }
+
+      if (planned.length === 0) {
+        return NextResponse.json({ error: 'No valid recipients with phone numbers' }, { status: 400 })
+      }
+
+      plan = {
+        broadcastId: broadcast_id,
+        templateName: existing.template_name,
+        templateLanguage: existing.template_language || 'en_US',
+        planned,
+        rejected: 0,
+      }
+    } else {
+      let recipients: NewRecipient[]
+      if (Array.isArray(newRecipients) && newRecipients.length > 0) {
+        recipients = newRecipients
+      } else if (Array.isArray(phone_numbers) && phone_numbers.length > 0) {
+        const shared: string[] = Array.isArray(template_params) ? template_params : []
+        recipients = phone_numbers.map((phone: string) => ({ phone, params: shared }))
+      } else {
+        return NextResponse.json(
+          { error: 'Provide either `recipients` (preferred) or `phone_numbers` — must be a non-empty array' },
+          { status: 400 },
+        )
+      }
+
+      plan = await createBroadcast(supabase, accountId, user.id, {
+        name: null,
+        templateName: template_name,
+        templateLanguage: template_language,
+        recipients: recipients.map((r) => ({
+          to: typeof r.phone === 'string' ? r.phone : '',
+          params: r.params,
+        })),
+      })
+    }
 
     const outcome = await deliverBroadcast(supabase, accountId, user.id, plan)
 
