@@ -531,10 +531,92 @@ async function handleMessageStatus(body: ZernioWebhookPayload) {
   const newStatus = statusMap[body.event];
   if (!newStatus) return;
 
-  await (supabaseAdmin() as any)
+  const db = supabaseAdmin() as any;
+
+  const { error: updErr, count: updatedCount } = await db
     .from('messages')
-    .update({ status: newStatus })
+    .update({ status: newStatus }, { count: 'exact' })
     .eq('message_id', msg.id);
+
+  if (updErr) {
+    console.error('[zernio/webhook] status update failed:', updErr);
+    return;
+  }
+
+  // Outbound message sent from WhatsApp native app (not via wacrm API).
+  // The message doesn't exist in our DB yet — mirror it so the inbox
+  // and AI agent can see human replies.
+  if (updatedCount === 0 && body.event === 'message.sent' && msg.direction === 'outgoing') {
+    await insertPlatformOutboundMessage(body, msg);
+  }
+}
+
+async function insertPlatformOutboundMessage(
+  body: ZernioWebhookPayload,
+  msg: NonNullable<ZernioWebhookPayload['message']>,
+) {
+  const acct = body.account;
+  if (!acct) return;
+
+  const accountId = await resolveAccountId(acct.accountId, acct.profileId);
+  if (!accountId) return;
+
+  const db = supabaseAdmin() as any;
+  const { data: profile } = await db
+    .from('profiles')
+    .select('user_id')
+    .eq('account_id', accountId)
+    .limit(1)
+    .maybeSingle();
+  const userId = profile?.user_id ?? accountId;
+
+  const conversation = body.conversation;
+  if (!conversation) return;
+
+  const phoneNumber = msg.sender?.phoneNumber?.replace('+', '') || conversation.participantId;
+
+  const contactOutcome = await findOrCreateContact(
+    accountId,
+    userId,
+    phoneNumber,
+    msg.sender?.name || conversation.participantName || '',
+    msg.platform,
+  );
+  if (!contactOutcome) return;
+
+  const convOutcome = await findOrCreateConversation(
+    accountId,
+    userId,
+    contactOutcome.id,
+    msg.platform === 'whatsapp' ? 'whatsapp' : msg.platform === 'instagram' ? 'instagram' : undefined,
+    'zernio',
+    conversation.id,
+    acct.accountId,
+  );
+  if (!convOutcome) return;
+
+  await db.from('messages').insert({
+    account_id: accountId,
+    conversation_id: convOutcome.id,
+    sender_type: 'agent',
+    sender_id: userId,
+    content_type: msg.attachments?.length ? msg.attachments[0].type : 'text',
+    content_text: msg.text,
+    media_url: msg.attachments?.length ? msg.attachments[0].url : null,
+    message_id: msg.id,
+    platform_message_id: msg.platformMessageId ?? null,
+    status: 'sent',
+    created_at: msg.sentAt || new Date().toISOString(),
+  });
+
+  await db
+    .from('conversations')
+    .update({
+      last_message_text: msg.text,
+      last_message_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', convOutcome.id);
 }
 
 async function handleAccountConnected(body: ZernioWebhookPayload) {
