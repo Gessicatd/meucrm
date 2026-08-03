@@ -593,12 +593,12 @@ async function sendZernioMessage(
       zernioMsgId = result.messageId;
       zernioConvResultId = result.conversationId;
     } else if (messageType === 'template' && templateName && resolvedConvId) {
-      const templateElement: Record<string, unknown> = {
+      const element: { name: string; language: string; components?: Array<{ type: string; parameters?: Array<{ type: string; text?: string }> }> } = {
         name: templateName,
         language: templateLanguage || 'en_US',
       };
       if (templateParams?.length) {
-        templateElement.components = [{
+        element.components = [{
           type: 'body',
           parameters: templateParams.map((p) => ({ type: 'text', text: p })),
         }];
@@ -606,7 +606,7 @@ async function sendZernioMessage(
       const result = await sendInboxMessage({
         zernioConversationId: resolvedConvId,
         zernioAccountId: resolvedAcctId,
-        template: { elements: [templateElement] },
+        template: { elements: [element] },
       });
       zernioMsgId = result.messageId;
     } else if (messageType === 'buttons') {
