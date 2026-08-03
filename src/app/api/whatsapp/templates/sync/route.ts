@@ -2,8 +2,16 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { listTemplates } from '@/lib/zernio/client'
 import { getSocialAccountId } from '@/lib/zernio/store'
+import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
 import type { ZernioTemplate } from '@/lib/zernio/client'
 import type { TemplateButton, TemplateSampleValues } from '@/types'
+
+function normalizeCategory(cat: string): 'Marketing' | 'Utility' | 'Authentication' {
+  const upper = cat.toUpperCase()
+  if (upper === 'UTILITY') return 'Utility'
+  if (upper === 'AUTHENTICATION') return 'Authentication'
+  return 'Marketing'
+}
 
 function parseButtons(components: ZernioTemplate['components']): TemplateButton[] {
   const buttonsComp = components?.find((c) => c.type?.toUpperCase() === 'BUTTONS')
@@ -99,7 +107,7 @@ export async function POST() {
         account_id: accountId,
         user_id: user.id,
         name: t.name,
-        category: t.category,
+        category: normalizeCategory(t.category),
         language: t.language,
         header_type: headerType,
         header_content: header?.text ?? null,
@@ -107,7 +115,7 @@ export async function POST() {
         footer_text: footer?.text ?? null,
         buttons: parsedButtons.length ? parsedButtons : null,
         sample_values: sampleValues,
-        status: t.status,
+        status: normalizeStatus(t.status),
         meta_template_id: t.id ?? null,
         updated_at: new Date().toISOString(),
       }
