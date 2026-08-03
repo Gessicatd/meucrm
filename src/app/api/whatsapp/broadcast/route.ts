@@ -88,6 +88,18 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Broadcast has no recipients' }, { status: 400 })
       }
 
+      // Build a phone→params lookup from the request body so per-contact
+      // variable values computed by the frontend survive the round-trip.
+      const paramsByPhone = new Map<string, string[]>()
+      if (Array.isArray(newRecipients)) {
+        for (const nr of newRecipients) {
+          const p = (typeof nr.phone === 'string' ? nr.phone : '').replace(/[^\d]/g, '')
+          if (p) {
+            paramsByPhone.set(p, Array.isArray(nr.params) ? nr.params.filter((v): v is string => typeof v === 'string') : [])
+          }
+        }
+      }
+
       const planned: {
         recipientRowId: string
         phone: string
@@ -104,7 +116,7 @@ export async function POST(request: Request) {
           recipientRowId: r.id as string,
           phone,
           contactId: r.contact_id as string,
-          params: [],
+          params: paramsByPhone.get(phone) ?? [],
         })
       }
 
