@@ -40,6 +40,11 @@ function supabaseAdmin() {
 
 export const maxDuration = 60
 
+// Dedup unknown ig_user_id warnings — each ID is warned once per process
+// lifetime to avoid flooding logs every time a DM arrives for an account
+// that has no instagram_config row configured.
+const warnedUnconfiguredIgIds = new Set<string>()
+
 // ============================================================
 // GET — verify webhook subscription (hub handshake)
 //
@@ -255,21 +260,14 @@ async function processInstagramWebhook(body: InstagramWebhookPayload) {
       .maybeSingle()
 
     if (configError || !config) {
-      const { data: allConfigs } = await db
-        .from('instagram_config')
-        .select('instagram_business_account_id, account_id, status')
-
-      console.error(
-        '[instagram webhook] no config found for ig_user_id:',
-        recipientIgUserId,
-        configError ? `error: ${configError.message}` : 'no matching row',
-        '| All configured IG accounts:',
-        allConfigs?.map((c: { instagram_business_account_id: string; account_id: string; status: string }) => ({
-          id: c.instagram_business_account_id,
-          account: c.account_id,
-          status: c.status,
-        })) ?? 'none',
-      )
+      if (!warnedUnconfiguredIgIds.has(recipientIgUserId)) {
+        warnedUnconfiguredIgIds.add(recipientIgUserId)
+        console.warn(
+          '[instagram webhook] no config found for ig_user_id:',
+          recipientIgUserId,
+          '(this warning fires once per process; subsequent DMs for this account are silently dropped)',
+        )
+      }
       continue
     }
 
@@ -749,21 +747,15 @@ async function processComment(
     .maybeSingle()
 
   if (configError || !config) {
-    const { data: allConfigs } = await db
-      .from('instagram_config')
-      .select('instagram_business_account_id, account_id, status')
-
-    console.error(
-      '[instagram webhook] no config found for comment target:',
-      igUserId,
-      configError ? `error: ${configError.message}` : 'no matching row',
-      '| All configured IG accounts:',
-      allConfigs?.map((c: { instagram_business_account_id: string; account_id: string; status: string }) => ({
-        id: c.instagram_business_account_id,
-        account: c.account_id,
-        status: c.status,
-      })) ?? 'none',
-    )
+    if (!warnedUnconfiguredIgIds.has(igUserId)) {
+      warnedUnconfiguredIgIds.add(igUserId)
+      console.warn(
+        '[instagram webhook] no config found for comment target:',
+        igUserId,
+        '(this warning fires once per process; subsequent comments for this account are silently dropped)',
+      )
+    }
+    return
     return
   }
 
