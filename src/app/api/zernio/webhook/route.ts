@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
   let body: ZernioWebhookPayload;
   try {
-    body = normalizeZernioPayload(JSON.parse(rawBody)) as ZernioWebhookPayload;
+    body = normalizeZernioPayload(JSON.parse(rawBody)) as unknown as ZernioWebhookPayload;
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
