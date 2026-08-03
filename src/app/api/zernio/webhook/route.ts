@@ -1,6 +1,7 @@
 import { NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getProfileId, updateConnectedAccounts } from '@/lib/zernio/store';
+import { normalizeZernioPayload } from '@/lib/zernio/normalize';
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply';
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
 
   let body: ZernioWebhookPayload;
   try {
-    body = JSON.parse(rawBody);
+    body = normalizeZernioPayload(JSON.parse(rawBody)) as ZernioWebhookPayload;
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
