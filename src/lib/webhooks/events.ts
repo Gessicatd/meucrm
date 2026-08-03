@@ -16,6 +16,7 @@ export const WEBHOOK_EVENTS = [
   'conversation.started', // a new conversation was started via Zernio
   'contact.created', // a new contact was created
   'reaction.received', // a reaction was received on a message (WhatsApp/Telegram)
+  'comment.received', // an Instagram/Facebook comment was received on a tracked post
 ] as const;
 
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
@@ -31,6 +32,7 @@ export const WEBHOOK_EVENT_DESCRIPTIONS: Record<WebhookEvent, string> = {
   'conversation.started': 'A new conversation was started via Zernio',
   'contact.created': 'A new contact was created',
   'reaction.received': 'A reaction emoji was received on a message',
+  'comment.received': 'An Instagram/Facebook comment was received on a tracked post',
 };
 
 /** Type-narrow an unknown value into a valid `WebhookEvent`. */
