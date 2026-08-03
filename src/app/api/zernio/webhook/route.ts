@@ -379,7 +379,7 @@ async function handleInboundMessage(body: ZernioWebhookPayload) {
   const provider = 'zernio';
 
   // Create/find contact using sender info
-  const phoneNumber = msg.sender.phoneNumber.replace('+', '');
+  const phoneNumber = (msg.sender.phoneNumber ?? msg.sender.id ?? '').replace('+', '');
   const contactOutcome = await findOrCreateContact(
     accountId,
     userId,
