@@ -522,7 +522,7 @@ async function padTemplateParams(
 
   if (varCount === 0) return providedParams ?? []
   const params = providedParams ?? []
-  while (params.length < varCount) params.push('')
+  while (params.length < varCount) params.push('.')
   return params.slice(0, varCount)
 }
 
