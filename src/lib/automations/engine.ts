@@ -485,7 +485,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
     }
 
     case 'send_media': {
-      const cfg = step.step_config as SendMediaStepConfig
+      const cfg = step.step_config as unknown as SendMediaStepConfig
       if (!args.contactId) throw new Error('send_media needs a contact')
       if (!cfg.media_url?.trim()) throw new Error('send_media needs media_url')
       if (!['image', 'video', 'document', 'audio'].includes(cfg.media_type))
