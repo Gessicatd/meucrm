@@ -81,7 +81,7 @@ export async function POST(request: Request) {
 
       const { data: recipients } = await supabase
         .from('broadcast_recipients')
-        .select('id, contact:contacts(phone)')
+        .select('id, contact_id, contact:contacts(phone)')
         .eq('broadcast_id', broadcast_id)
 
       if (!recipients?.length) {
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
         planned.push({
           recipientRowId: r.id as string,
           phone,
-          contactId: contact?.id ?? '',
+          contactId: r.contact_id as string,
           params: [],
         })
       }
