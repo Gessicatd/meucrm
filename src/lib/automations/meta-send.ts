@@ -77,6 +77,33 @@ export async function engineSendButton(args: SendButtonArgs): Promise<{ whatsapp
   return { whatsapp_message_id: result.whatsappMessageId }
 }
 
+export interface EngineSendMediaArgs {
+  accountId: string
+  userId: string
+  conversationId: string
+  contactId: string
+  mediaType: 'image' | 'video' | 'document' | 'audio'
+  mediaUrl: string
+  caption?: string
+  filename?: string
+}
+
+export async function engineSendMedia(args: EngineSendMediaArgs): Promise<{ whatsapp_message_id: string }> {
+  const result = await sendMessageToConversation(
+    await resolveDb(),
+    args.accountId,
+    {
+      conversationId: args.conversationId,
+      messageType: args.mediaType,
+      mediaUrl: args.mediaUrl,
+      contentText: args.caption,
+      filename: args.filename,
+      senderType: 'bot',
+    },
+  )
+  return { whatsapp_message_id: result.whatsappMessageId }
+}
+
 async function resolveDb() {
   const { supabaseAdmin } = await import('./admin-client')
   return supabaseAdmin()

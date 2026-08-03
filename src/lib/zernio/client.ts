@@ -367,57 +367,6 @@ export async function createPost(args: {
   return data.post;
 }
 
-// ─── Instagram Posts (published media) ──────────────────────
-
-export interface InstagramPostResult {
-  posts: InstagramPostItem[];
-  nextCursor?: string;
-}
-
-export interface InstagramPostItem {
-  id: string;
-  caption?: string;
-  media_type?: string;
-  media_url?: string;
-  permalink?: string;
-  timestamp?: string;
-}
-
-/** Fetch published Instagram posts via GET /instagram/posts. */
-export async function getInstagramPosts(args: {
-  limit?: number;
-  cursor?: string;
-}): Promise<InstagramPostResult> {
-  const params = new URLSearchParams();
-  if (args.limit) params.set('limit', String(args.limit));
-  if (args.cursor) params.set('cursor', args.cursor);
-  const qs = params.toString();
-
-  const raw = await zernioFetch<{
-    data: Array<{
-      id: string;
-      caption?: string;
-      media_type?: string;
-      media_url?: string;
-      permalink?: string;
-      timestamp?: string;
-    }>;
-    paging?: { cursors?: { after?: string } };
-  }>(`/instagram/posts${qs ? `?${qs}` : ''}`);
-
-  return {
-    posts: (raw.data ?? []).map((p) => ({
-      id: p.id,
-      caption: p.caption,
-      media_type: p.media_type,
-      media_url: p.media_url,
-      permalink: p.permalink,
-      timestamp: p.timestamp,
-    })),
-    nextCursor: raw.paging?.cursors?.after,
-  };
-}
-
 // ─── Webhooks ───────────────────────────────────────────────
 
 export async function listWebhooks(): Promise<ZernioWebhookConfig[]> {

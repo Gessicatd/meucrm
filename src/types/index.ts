@@ -489,7 +489,8 @@ export type AutomationStepType =
   | 'close_conversation'
   | 'ai_condition'
   | 'ai_reply'
-  | 'ai_extract';
+  | 'ai_extract'
+  | 'send_media';
 
 export type AutomationLogStatus = 'success' | 'partial' | 'failed';
 
@@ -557,6 +558,13 @@ export interface SendButtonStepConfig {
     payload?: string;
     url?: string;
   }[];
+}
+
+export interface SendMediaStepConfig {
+  media_type: 'image' | 'video' | 'document' | 'audio';
+  media_url: string;
+  caption?: string;
+  filename?: string;
 }
 
 export interface TagStepConfig {

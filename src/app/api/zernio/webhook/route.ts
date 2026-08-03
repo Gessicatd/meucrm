@@ -502,6 +502,53 @@ async function handleInboundMessage(body: ZernioWebhookPayload) {
   });
 
   if (!flowResult.consumed) {
+    runAutomationsForTrigger({
+      accountId,
+      triggerType: 'new_message_received',
+      contactId: contactOutcome.id,
+      channel,
+      provider,
+      context: {
+        message_text: msg.text ?? '',
+        conversation_id: convOutcome.id,
+      },
+    }).catch((err) => console.error('[zernio automations] new_message_received dispatch failed:', err));
+
+    // Only dispatch keyword_match if there's text to match against
+    if (msg.text) {
+      runAutomationsForTrigger({
+        accountId,
+        triggerType: 'keyword_match',
+        contactId: contactOutcome.id,
+        channel,
+        provider,
+        context: {
+          message_text: msg.text,
+          conversation_id: convOutcome.id,
+        },
+      }).catch((err) => console.error('[zernio automations] keyword_match dispatch failed:', err));
+    }
+
+    if (contactOutcome.wasCreated) {
+      runAutomationsForTrigger({
+        accountId,
+        triggerType: 'first_inbound_message',
+        contactId: contactOutcome.id,
+        channel,
+        provider,
+        context: { conversation_id: convOutcome.id },
+      }).catch((err) => console.error('[zernio automations] first_inbound dispatch failed:', err));
+
+      runAutomationsForTrigger({
+        accountId,
+        triggerType: 'new_contact_created',
+        contactId: contactOutcome.id,
+        channel,
+        provider,
+        context: { conversation_id: convOutcome.id },
+      }).catch((err) => console.error('[zernio automations] new_contact dispatch failed:', err));
+    }
+
     await dispatchInboundToAiReply({
       accountId,
       conversationId: convOutcome.id,
@@ -871,9 +918,8 @@ async function handleCommentReceived(body: ZernioWebhookPayload) {
     conversationId: conversation.id,
     channel: 'instagram',
     provider: 'zernio',
-    message: { kind: 'text', text: commentText, meta_message_id: msgId, instagram_media_id: mediaId },
+    message: { kind: 'text', text: commentText, meta_message_id: msgId },
     isFirstInboundMessage: contact.wasCreated,
-    instagram_media_id: mediaId,
   });
 
   if (!flowResult.consumed) {
