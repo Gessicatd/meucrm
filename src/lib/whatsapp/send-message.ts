@@ -30,6 +30,7 @@ import {
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
+import { extractVariableIndices } from '@/lib/whatsapp/template-validators';
 
 export const MEDIA_KINDS = ['image', 'video', 'document', 'audio'] as const;
 export const INTERACTIVE_KINDS = ['buttons', 'list'] as const;
@@ -502,6 +503,29 @@ async function sendRyzeMessage(
 
 // ── Zernio send (primary: WhatsApp + Instagram) ────────────
 
+async function padTemplateParams(
+  db: SupabaseClient,
+  templateName: string,
+  templateLanguage: string,
+  providedParams: string[] | undefined,
+): Promise<string[]> {
+  const { data: tmpl } = await db
+    .from('message_templates')
+    .select('body_text')
+    .eq('name', templateName)
+    .eq('language', templateLanguage)
+    .maybeSingle()
+
+  const varCount = tmpl?.body_text
+    ? extractVariableIndices(tmpl.body_text).length
+    : 0
+
+  if (varCount === 0) return providedParams ?? []
+  const params = providedParams ?? []
+  while (params.length < varCount) params.push('')
+  return params.slice(0, varCount)
+}
+
 async function sendZernioMessage(
   db: SupabaseClient,
   accountId: string,
@@ -580,7 +604,10 @@ async function sendZernioMessage(
   let zernioConvResultId: string | undefined;
 
   try {
-    // Template messages may need to create a conversation first
+    const paddedParams = messageType === 'template' && templateName
+      ? await padTemplateParams(db, templateName, templateLanguage || 'en_US', templateParams)
+      : []
+
     if (messageType === 'template' && templateName && !resolvedConvId) {
       const phone = contact?.phone || contact?.instagram_id || '';
       const result = await createInboxConversation({
@@ -588,7 +615,7 @@ async function sendZernioMessage(
         participantId: phone,
         templateName,
         templateLanguage: templateLanguage || 'en_US',
-        templateParams: templateParams ?? [],
+        templateParams: paddedParams,
       });
       zernioMsgId = result.messageId;
       zernioConvResultId = result.conversationId;
@@ -597,10 +624,10 @@ async function sendZernioMessage(
         name: templateName,
         language: templateLanguage || 'en_US',
       };
-      if (templateParams?.length) {
+      if (paddedParams.length > 0) {
         element.components = [{
           type: 'body',
-          parameters: templateParams.map((p) => ({ type: 'text', text: p })),
+          parameters: paddedParams.map((p) => ({ type: 'text', text: p })),
         }];
       }
       const result = await sendInboxMessage({
