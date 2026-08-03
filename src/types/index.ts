@@ -200,6 +200,8 @@ export interface Conversation {
    *  Meta Cloud API, 'ryzeapi' for RyzeAPI gateway. NULL for legacy
    *  rows and Instagram conversations. */
   provider?: 'meta' | 'ryzeapi' | 'zernio';
+  ai_autoreply_disabled?: boolean;
+  ai_autoreply_disabled_at?: string;
   created_at: string;
   updated_at: string;
   contact?: Contact;

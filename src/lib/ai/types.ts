@@ -21,6 +21,8 @@ export interface AiConfig {
   isActive: boolean
   autoReplyEnabled: boolean
   autoReplyMaxPerConversation: number
+  autoReplyPauseMode: 'manual' | 'timed'
+  autoReplyPauseMinutes: number
 }
 
 /** A single conversation turn in the shape both providers accept. */

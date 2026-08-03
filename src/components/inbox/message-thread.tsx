@@ -26,6 +26,7 @@ import {
   RefreshCw,
   PanelRightOpen,
   PanelRightClose,
+  Sparkles,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -177,6 +178,7 @@ export function MessageThread({
   // parent's resyncToken); the 700ms spin is just feedback so the click
   // doesn't feel like a no-op. Cleared via the timer ref on unmount.
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isReEnabling, setIsReEnabling] = useState(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     return () => {
@@ -194,6 +196,30 @@ export function MessageThread({
       refreshTimerRef.current = null;
     }, 700);
   }, [isRefreshing, onRefresh]);
+
+  const handleReEnableAi = useCallback(async () => {
+    if (!conversation || isReEnabling) return;
+    setIsReEnabling(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('conversations')
+        .update({
+          ai_autoreply_disabled: false,
+          ai_autoreply_disabled_at: null,
+          ai_reply_count: 0,
+        })
+        .eq('id', conversation.id);
+      if (error) throw error;
+      toast.success('AI auto-reply re-enabled for this conversation');
+      onRefresh?.();
+    } catch (err) {
+      console.error('Failed to re-enable AI:', err);
+      toast.error('Failed to re-enable AI');
+    } finally {
+      setIsReEnabling(false);
+    }
+  }, [conversation, isReEnabling, onRefresh]);
   const [replyTo, setReplyTo] = useState<ReplyDraft | null>(null);
 
   // Profiles are bounded by RLS to rows the current user is allowed to
@@ -1004,6 +1030,20 @@ export function MessageThread({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {conversation?.ai_autoreply_disabled && (
+            <button
+              type="button"
+              onClick={handleReEnableAi}
+              disabled={isReEnabling}
+              title="AI auto-reply is paused — click to re-enable"
+              className="inline-flex h-7 items-center gap-1 px-2 text-xs rounded-md bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors disabled:opacity-60"
+            >
+              <Sparkles className="h-3 w-3" />
+              <span className="hidden sm:inline">AI paused</span>
+            </button>
+          )}
+
         </div>
       </div>
 

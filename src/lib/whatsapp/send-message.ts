@@ -792,5 +792,20 @@ async function persistSentMessage(
     );
   }
 
+  // Also disable AI auto-reply for this conversation — a human stepped in.
+  if (effectiveSenderType === 'agent') {
+    try {
+      await db
+        .from('conversations')
+        .update({ ai_autoreply_disabled: true, ai_autoreply_disabled_at: new Date().toISOString() })
+        .eq('id', conversationId);
+    } catch (err) {
+      console.error(
+        '[send-message] ai-pause-on-agent-send failed:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   return { messageId: messageRecord.id, whatsappMessageId: platformMessageId };
 }

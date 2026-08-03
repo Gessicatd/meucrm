@@ -615,6 +615,8 @@ async function insertPlatformOutboundMessage(
       last_message_text: msg.text,
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      ai_autoreply_disabled: true,
+      ai_autoreply_disabled_at: new Date().toISOString(),
     })
     .eq('id', convOutcome.id);
 }

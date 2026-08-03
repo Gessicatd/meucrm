@@ -64,12 +64,27 @@ export async function dispatchInboundToAiReply(
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
-      .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
+      .select('assigned_agent_id, ai_autoreply_disabled, ai_autoreply_disabled_at, ai_reply_count')
       .eq('id', conversationId)
       .maybeSingle()
     if (convErr || !conv) return
     if (conv.assigned_agent_id) return // a human owns this thread
-    if (conv.ai_autoreply_disabled) return // handed off / turned off here
+    if (conv.ai_autoreply_disabled) {
+      if (config.autoReplyPauseMode === 'timed' && conv.ai_autoreply_disabled_at) {
+        const resumeAt = new Date(conv.ai_autoreply_disabled_at).getTime()
+                       + config.autoReplyPauseMinutes * 60_000
+        if (Date.now() >= resumeAt) {
+          await db
+            .from('conversations')
+            .update({ ai_autoreply_disabled: false, ai_autoreply_disabled_at: null })
+            .eq('id', conversationId)
+        } else {
+          return
+        }
+      } else {
+        return
+      }
+    }
     // Cheap early-out; the authoritative cap check is the atomic claim
     // below (this read can race a concurrent inbound).
     if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return

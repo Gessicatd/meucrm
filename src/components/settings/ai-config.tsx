@@ -60,6 +60,8 @@ export function AiConfig() {
   const [isActive, setIsActive] = useState(false);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
   const [maxPerConversation, setMaxPerConversation] = useState(3);
+  const [pauseMode, setPauseMode] = useState<'manual' | 'timed'>('manual');
+  const [pauseMinutes, setPauseMinutes] = useState(60);
 
   // Guard keyed on the account (not a bare boolean) so an in-place
   // account switch — ownership transfer, multi-account membership —
@@ -84,6 +86,8 @@ export function AiConfig() {
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
         setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
+        setPauseMode(data.auto_reply_pause_mode ?? 'manual');
+        setPauseMinutes(data.auto_reply_pause_minutes ?? 60);
         setHasStoredKey(Boolean(data.has_key));
         setApiKey(data.has_key ? MASKED_KEY : '');
         setKeyEdited(false);
@@ -122,6 +126,8 @@ export function AiConfig() {
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
+    auto_reply_pause_mode: pauseMode,
+    auto_reply_pause_minutes: pauseMinutes,
   });
 
   const handleTest = async () => {
@@ -398,6 +404,70 @@ export function AiConfig() {
                 className="w-20"
               />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pause on human reply</CardTitle>
+            <CardDescription>
+              When a human agent replies, the auto-reply bot pauses for that
+              conversation. Choose whether the bot stays quiet until manually
+              re-enabled or comes back after a timeout.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Pause mode</Label>
+              <Select
+                value={pauseMode}
+                onValueChange={(v) => setPauseMode(v as 'manual' | 'timed')}
+                disabled={disabled || !autoReplyEnabled}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">
+                    Manual — agent must re-enable
+                  </SelectItem>
+                  <SelectItem value="timed">
+                    Timed — auto-resume after
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {pauseMode === 'timed' && (
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="ai-pause-minutes">Resume after</Label>
+                  <p className="text-xs text-muted-foreground">
+                    The bot resumes automatically this many minutes after the
+                    last human reply.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="ai-pause-minutes"
+                    type="number"
+                    min={1}
+                    max={10080}
+                    value={pauseMinutes}
+                    onChange={(e) =>
+                      setPauseMinutes(
+                        Math.min(
+                          10080,
+                          Math.max(1, Number(e.target.value) || 1),
+                        ),
+                      )
+                    }
+                    disabled={disabled || !autoReplyEnabled}
+                    className="w-24"
+                  />
+                  <span className="text-xs text-muted-foreground">min</span>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -71,6 +71,8 @@ export async function POST(request: Request) {
         isActive: true,
         autoReplyEnabled: false,
         autoReplyMaxPerConversation: 3,
+        autoReplyPauseMode: 'manual',
+        autoReplyPauseMinutes: 60,
       })
     } catch (err) {
       if (err instanceof AiError) {

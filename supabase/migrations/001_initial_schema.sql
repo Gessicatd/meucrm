@@ -256,7 +256,8 @@ CREATE TABLE IF NOT EXISTS conversations (
   ai_reply_count          INTEGER NOT NULL DEFAULT 0,
   provider                TEXT CHECK (provider IN ('meta', 'ryzeapi', 'zernio')),
   zernio_conversation_id  TEXT,
-  zernio_account_id       TEXT
+  zernio_account_id       TEXT,
+  ai_autoreply_disabled_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id    ON conversations(user_id);
@@ -843,6 +844,8 @@ CREATE TABLE IF NOT EXISTS ai_configs (
   is_active                       BOOLEAN NOT NULL DEFAULT false,
   auto_reply_enabled              BOOLEAN NOT NULL DEFAULT false,
   auto_reply_max_per_conversation INTEGER NOT NULL DEFAULT 3 CHECK (auto_reply_max_per_conversation BETWEEN 1 AND 20),
+  auto_reply_pause_mode           TEXT NOT NULL DEFAULT 'manual' CHECK (auto_reply_pause_mode IN ('manual', 'timed')),
+  auto_reply_pause_minutes        INTEGER NOT NULL DEFAULT 60 CHECK (auto_reply_pause_minutes BETWEEN 1 AND 10080),
   created_at                      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at                      TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -11,6 +11,8 @@ function config(overrides: Partial<AiConfig> = {}): AiConfig {
     isActive: true,
     autoReplyEnabled: false,
     autoReplyMaxPerConversation: 3,
+    autoReplyPauseMode: 'manual',
+    autoReplyPauseMinutes: 60,
     ...overrides,
   }
 }
