@@ -76,6 +76,19 @@ export async function POST(request: Request) {
       template_params,
       template_message_params,
       reply_to_message_id,
+      // Interactive buttons
+      buttons,
+      header_text,
+      footer_text,
+      button_label,
+      sections,
+      // PIX (RyzeAPI only)
+      pix_key,
+      pix_key_type,
+      merchant_name,
+      pix_items,
+      // Link preview
+      link_preview,
     } = body
 
     if ((!conversationIdInput && !contact_id) || !message_type) {
@@ -97,6 +110,12 @@ export async function POST(request: Request) {
         contentText: content_text,
         mediaUrl: media_url,
         templateName: template_name,
+        buttons,
+        buttonLabel: button_label,
+        sections,
+        pixKey: pix_key,
+        pixKeyType: pix_key_type,
+        merchantName: merchant_name,
       })
     } catch (err) {
       if (err instanceof SendMessageError) {
@@ -181,6 +200,16 @@ export async function POST(request: Request) {
         templateParams: template_params,
         templateMessageParams: template_message_params,
         replyToMessageId: reply_to_message_id,
+        buttons,
+        headerText: header_text,
+        footerText: footer_text,
+        buttonLabel: button_label,
+        sections,
+        pixKey: pix_key,
+        pixKeyType: pix_key_type,
+        merchantName: merchant_name,
+        pixItems: pix_items,
+        linkPreview: link_preview,
       })
 
       return NextResponse.json({

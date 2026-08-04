@@ -91,23 +91,34 @@ const emptyForm: TemplateFormData = {
 };
 
 const COMMON_LANGUAGE_CODES = [
-  'en_US',
-  'en_GB',
-  'en',
-  'es',
-  'es_ES',
-  'es_MX',
-  'fr',
-  'fr_FR',
-  'de',
-  'it',
-  'pt_BR',
-  'pt_PT',
-  'nl',
-  'pl',
-  'ru',
-  'tr',
-  'lt',
+  { value: 'en', label: 'English (en)' },
+  { value: 'en_US', label: 'English US (en_US)' },
+  { value: 'en_GB', label: 'English UK (en_GB)' },
+  { value: 'pt_BR', label: 'Português BR (pt_BR)' },
+  { value: 'pt_PT', label: 'Português PT (pt_PT)' },
+  { value: 'es', label: 'Español (es)' },
+  { value: 'es_ES', label: 'Español ES (es_ES)' },
+  { value: 'es_MX', label: 'Español MX (es_MX)' },
+  { value: 'es_AR', label: 'Español AR (es_AR)' },
+  { value: 'fr', label: 'Français (fr)' },
+  { value: 'fr_FR', label: 'Français FR (fr_FR)' },
+  { value: 'de', label: 'Deutsch (de)' },
+  { value: 'it', label: 'Italiano (it)' },
+  { value: 'nl', label: 'Nederlands (nl)' },
+  { value: 'pl', label: 'Polski (pl)' },
+  { value: 'ru', label: 'Русский (ru)' },
+  { value: 'tr', label: 'Türkçe (tr)' },
+  { value: 'ar', label: 'العربية (ar)' },
+  { value: 'hi', label: 'हिन्दी (hi)' },
+  { value: 'id', label: 'Indonesia (id)' },
+  { value: 'ja', label: '日本語 (ja)' },
+  { value: 'ko', label: '한국어 (ko)' },
+  { value: 'ms', label: 'Malay (ms)' },
+  { value: 'th', label: 'ไทย (th)' },
+  { value: 'vi', label: 'Tiếng Việt (vi)' },
+  { value: 'zh_CN', label: '中文简体 (zh_CN)' },
+  { value: 'zh_TW', label: '中文繁體 (zh_TW)' },
+  { value: 'zh_HK', label: '中文香港 (zh_HK)' },
 ];
 
 function emptyButton(type: TemplateButton['type']): TemplateButton {
@@ -122,6 +133,110 @@ function emptyButton(type: TemplateButton['type']): TemplateButton {
       return { type: 'COPY_CODE', text: '', example: '' };
   }
 }
+
+interface TemplateModel {
+  label: string;
+  description: string;
+  name: string;
+  category: MessageTemplate['category'];
+  language: string;
+  header_format: HeaderFormat;
+  header_content: string;
+  body_text: string;
+  footer_text: string;
+  buttons: TemplateButton[];
+}
+
+const TEMPLATE_MODELS: TemplateModel[] = [
+  {
+    label: 'Boas-vindas',
+    description: 'Mensagem de boas-vindas com opções de atendimento',
+    name: 'welcome_customer',
+    category: 'Utility' as const,
+    language: 'pt_BR',
+    header_format: 'text' as const,
+    header_content: 'Bem-vindo!',
+    body_text: 'Olá, {{1}}!\n\nSeja bem-vindo(a) à {{2}}.\n\nRecebemos seu contato e em instantes nossa equipe irá atendê-lo.\n\nEnquanto isso, escolha uma das opções abaixo para agilizar seu atendimento.',
+    footer_text: 'Responderemos o mais rápido possível.',
+    buttons: [
+      { type: 'QUICK_REPLY', text: 'Quero atendimento' },
+      { type: 'QUICK_REPLY', text: 'Falar com consultor' },
+    ],
+  },
+  {
+    label: 'Confirmação de agendamento',
+    description: 'Confirmação de data e horário agendado',
+    name: 'appointment_confirmation',
+    category: 'Utility' as const,
+    language: 'pt_BR',
+    header_format: 'text' as const,
+    header_content: 'Agendamento',
+    body_text: 'Olá, {{1}}!\n\nSeu atendimento foi agendado com sucesso.\n\n📅 Data: {{2}}\n🕒 Horário: {{3}}\n\nCaso precise remarcar, basta responder esta mensagem.',
+    footer_text: 'Aguardamos você!',
+    buttons: [
+      { type: 'QUICK_REPLY', text: 'Confirmar presença' },
+      { type: 'QUICK_REPLY', text: 'Remarcar' },
+    ],
+  },
+  {
+    label: 'Cobrança',
+    description: 'Aviso de pagamento pendente com link',
+    name: 'payment_pending',
+    category: 'Utility' as const,
+    language: 'pt_BR',
+    header_format: 'text' as const,
+    header_content: 'Pagamento',
+    body_text: 'Olá, {{1}}!\n\nIdentificamos que existe um pagamento pendente referente a {{2}}.\n\nValor: R\$ {{3}}\n\nClique no botão abaixo para realizar o pagamento.',
+    footer_text: '',
+    buttons: [
+      { type: 'URL', text: 'Pagar agora', url: '{{4}}' },
+    ],
+  },
+  {
+    label: 'Recuperação de lead',
+    description: 'Follow-up para leads que não finalizaram',
+    name: 'lead_followup',
+    category: 'Marketing' as const,
+    language: 'pt_BR',
+    header_format: 'text' as const,
+    header_content: 'Ainda podemos ajudar?',
+    body_text: 'Olá, {{1}}!\n\nPercebemos que você demonstrou interesse em {{2}}, mas ainda não finalizou seu atendimento.\n\nNossa equipe está disponível para tirar qualquer dúvida.\n\nSerá um prazer ajudar você.',
+    footer_text: '',
+    buttons: [
+      { type: 'QUICK_REPLY', text: 'Tenho interesse' },
+      { type: 'QUICK_REPLY', text: 'Não agora' },
+    ],
+  },
+  {
+    label: 'Orçamento',
+    description: 'Envio de orçamento com link para detalhes',
+    name: 'quote_ready',
+    category: 'Utility' as const,
+    language: 'pt_BR',
+    header_format: 'text' as const,
+    header_content: 'Orcamento',
+    body_text: 'Olá, {{1}}!\n\nSeu orçamento já está disponível.\n\nValor estimado: {{2}}\n\nClique no botão abaixo para visualizar todos os detalhes.',
+    footer_text: '',
+    buttons: [
+      { type: 'URL', text: 'Ver orçamento', url: '{{3}}' },
+    ],
+  },
+  {
+    label: 'Assistente IA (SDR)',
+    description: 'Mensagem de assistente virtual para qualificação',
+    name: 'ai_assistant',
+    category: 'Utility' as const,
+    language: 'pt_BR',
+    header_format: 'text' as const,
+    header_content: 'Assistente Virtual',
+    body_text: 'Olá, {{1}}!\n\nSou a assistente virtual da {{2}}.\n\nEstou pronta para entender sua necessidade e encaminhar seu atendimento da forma mais rápida possível.\n\nVamos começar?',
+    footer_text: '',
+    buttons: [
+      { type: 'QUICK_REPLY', text: 'Sim' },
+      { type: 'QUICK_REPLY', text: 'Depois' },
+    ],
+  },
+];
 
 export function TemplateManager() {
   const supabase = createClient();
@@ -255,6 +370,23 @@ export function TemplateManager() {
     setDialogOpen(true);
   }
 
+  function handleSelectModel(model: TemplateModel) {
+    const varCount = extractVariableIndices(model.body_text).length;
+    setForm({
+      name: model.name,
+      category: model.category,
+      language: model.language,
+      header_format: model.header_format,
+      header_content: model.header_content,
+      header_media_url: '',
+      header_sample: '',
+      body_text: model.body_text,
+      body_samples: Array(varCount).fill(''),
+      footer_text: model.footer_text,
+      buttons: model.buttons.length > 0 ? [...model.buttons] : [],
+    })
+  }
+
   async function handleSubmit() {
     // AUTHENTICATION is blocked by the persistent banner + disabled
     // submit button; this is a defensive second line of defense.
@@ -282,11 +414,11 @@ export function TemplateManager() {
       toast.success(
         data.dry_run
           ? isEdit
-            ? 'Template updated (dry-run — no Meta call)'
-            : 'Template saved (dry-run — no Meta call)'
+            ? 'Template updated (dry-run — no submission)'
+            : 'Template saved (dry-run — no submission)'
           : isEdit
-            ? 'Edit submitted — Meta typically reviews within 24 hours.'
-            : 'Submitted to Meta — typical review time is 24 hours. Status updates automatically.',
+            ? 'Edit submitted via Zernio — Meta typically reviews within 24 hours.'
+            : 'Submitted via Zernio — typical review time is 24 hours.',
       );
       setDialogOpen(false);
       setForm(emptyForm);
@@ -309,7 +441,7 @@ export function TemplateManager() {
         throw new Error(data?.error || `Sync failed (HTTP ${res.status})`);
       }
       toast.success(
-        `Synced ${data.total} template${data.total === 1 ? '' : 's'} from Meta` +
+        `Synced ${data.total} template${data.total === 1 ? '' : 's'} via Zernio` +
           (data.inserted || data.updated
             ? ` (${data.inserted} new, ${data.updated} updated)`
             : ''),
@@ -324,13 +456,9 @@ export function TemplateManager() {
         toast.error(`Failed to sync: ${preview.join(', ')}${suffix}`);
       }
       if (data.truncated) {
-        // Use error (not warning) so the message survives long
-        // enough to read — sonner's `warning` auto-dismisses on
-        // the same short timer as `success`.
-        toast.error(
-          'Synced the first 2000 templates only — your account has more. Sync again to continue, or contact support if this persists.',
-          { duration: 10000 },
-        );
+        toast('Some templates may not have loaded — sync again if needed.', {
+          duration: 8000,
+        });
       }
       await fetchTemplates(user.id);
     } catch (err) {
@@ -484,7 +612,7 @@ export function TemplateManager() {
       <SettingsPanelHead
         title="Message templates"
         description={
-          'Create templates and submit them to Meta for approval. Use "Sync from Meta" to pull templates approved elsewhere.'
+          'Create templates and submit them via Zernio for approval. Use "Sync from Zernio" to pull templates approved elsewhere.'
         }
         action={
           <div className="flex items-center gap-2">
@@ -492,10 +620,10 @@ export function TemplateManager() {
               variant="outline"
               onClick={handleSyncFromMeta}
               disabled={syncing}
-              title="Pull approved templates from your Meta WhatsApp Business Account"
+              title="Pull approved templates via Zernio"
             >
               <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing…' : 'Sync from Meta'}
+              {syncing ? 'Syncing…' : 'Sync from Zernio'}
             </Button>
             <Button onClick={openCreate}>
               <Plus className="size-4" />
@@ -604,12 +732,12 @@ export function TemplateManager() {
                       disabled={deletingId === template.id}
                       aria-label={
                         template.meta_template_id
-                          ? 'Delete template from Meta and locally'
+                          ? 'Delete template via Zernio and locally'
                           : 'Delete template locally'
                       }
                       title={
                         template.meta_template_id
-                          ? 'Delete from Meta and locally'
+                          ? 'Delete via Zernio and locally'
                           : 'Delete locally'
                       }
                       className="text-muted-foreground hover:text-red-400 hover:bg-red-950/30 h-8 w-8"
@@ -645,9 +773,33 @@ export function TemplateManager() {
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {editingId
-                ? 'Save your changes to re-submit to Meta. Status will flip back to PENDING during review.'
-                : 'Build a template and submit it to Meta for approval. Once approved, you can use it in broadcasts and the inbox.'}
+                ? 'Save your changes to re-submit via Zernio. Status will flip back to PENDING during review.'
+                : 'Build a template and submit it via Zernio for approval. Once approved, you can use it in broadcasts and the inbox.'}
             </DialogDescription>
+
+            {!editingId && (
+              <div className="pt-1">
+                <Label className="text-xs text-muted-foreground">Start from a template model</Label>
+                <Select
+                  onValueChange={(val) => {
+                    const model = TEMPLATE_MODELS.find((m) => m.name === val);
+                    if (model) handleSelectModel(model);
+                  }}
+                >
+                  <SelectTrigger className="w-full bg-muted border-border text-foreground mt-1">
+                    <SelectValue placeholder="Select a pre-built model..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TEMPLATE_MODELS.map((m) => (
+                      <SelectItem key={m.name} value={m.name}>
+                        <span className="font-medium">{m.label}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">— {m.description}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </DialogHeader>
 
           {form.category === 'Authentication' && (
@@ -656,7 +808,7 @@ export function TemplateManager() {
               <p>
                 AUTHENTICATION templates have a fixed body + OTP button shape
                 that needs a different builder. Create them in Meta WhatsApp
-                Manager for now and use <strong>Sync from Meta</strong> to
+                Manager for now and use <strong>Sync from Zernio</strong> to
                 bring them in.
               </p>
             </div>
@@ -710,30 +862,34 @@ export function TemplateManager() {
 
               <div className="space-y-2">
                 <Label className="text-muted-foreground">Language</Label>
-                <Input
-                  list="template-language-codes"
-                  placeholder="en_US"
-                  value={form.language}
-                  onChange={(e) =>
-                    setForm({ ...form, language: e.target.value })
-                  }
-                  disabled={editingId !== null}
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-                />
-                <datalist id="template-language-codes">
-                  {COMMON_LANGUAGE_CODES.map((code) => (
-                    <option key={code} value={code} />
-                  ))}
-                </datalist>
+                {editingId !== null ? (
+                  <div className="flex items-center gap-2 h-9 px-3 bg-muted border border-border rounded-md">
+                    <span className="text-sm text-foreground">{form.language}</span>
+                    <span className="text-[11px] text-muted-foreground">(fixed)</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={form.language}
+                    onValueChange={(val) =>
+                      setForm({ ...form, language: val ?? 'en_US' })
+                    }
+                  >
+                    <SelectTrigger className="w-full bg-muted border-border text-foreground">
+                      <SelectValue placeholder="Select a language code..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COMMON_LANGUAGE_CODES.map((lang) => (
+                        <SelectItem key={lang.value} value={lang.value}>
+                          {lang.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <p className="text-[11px] text-muted-foreground">
                   {editingId
                     ? 'Language is fixed once a template exists on Meta.'
-                    : (
-                        <>
-                          Must match the exact code on Meta — <code>en_US</code>{' '}
-                          and <code>en</code> are distinct.
-                        </>
-                      )}
+                    : 'Must match the exact code on Meta — en_US and en are distinct.'}
                 </p>
               </div>
             </div>
@@ -1099,8 +1255,8 @@ export function TemplateManager() {
             <DialogTitle className="text-popover-foreground">Delete template?</DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {templateToDelete?.meta_template_id
-                ? `"${templateToDelete?.name}" will be deleted from Meta and from wacrm. Active broadcasts using this template will start failing on their next send. This can't be undone.`
-                : `"${templateToDelete?.name}" will be deleted from wacrm. It was never submitted to Meta, so no remote cleanup is needed.`}
+                ? `"${templateToDelete?.name}" will be deleted via Zernio and from wacrm. Active broadcasts using this template will start failing on their next send. This can't be undone.`
+                : `"${templateToDelete?.name}" will be deleted from wacrm. It was never submitted, so no remote cleanup is needed.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="bg-popover border-border">

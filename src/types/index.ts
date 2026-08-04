@@ -80,6 +80,12 @@ export interface Account {
   owner_user_id: string;
   created_at: string;
   updated_at: string;
+  /**
+   * Workspace settings sections visible to this account.
+   * NULL = all features enabled (default). Empty array = none.
+   * Managed by super admins via /api/admin/accounts/[id]/features.
+   */
+  workspace_features?: string[] | null;
 }
 
 /**
@@ -193,7 +199,9 @@ export interface Conversation {
   /** Which WhatsApp provider created this conversation. 'meta' for
    *  Meta Cloud API, 'ryzeapi' for RyzeAPI gateway. NULL for legacy
    *  rows and Instagram conversations. */
-  provider?: 'meta' | 'ryzeapi';
+  provider?: 'meta' | 'ryzeapi' | 'zernio';
+  ai_autoreply_disabled?: boolean;
+  ai_autoreply_disabled_at?: string;
   created_at: string;
   updated_at: string;
   contact?: Contact;
@@ -481,7 +489,8 @@ export type AutomationStepType =
   | 'close_conversation'
   | 'ai_condition'
   | 'ai_reply'
-  | 'ai_extract';
+  | 'ai_extract'
+  | 'send_media';
 
 export type AutomationLogStatus = 'success' | 'partial' | 'failed';
 
@@ -549,6 +558,13 @@ export interface SendButtonStepConfig {
     payload?: string;
     url?: string;
   }[];
+}
+
+export interface SendMediaStepConfig {
+  media_type: 'image' | 'video' | 'document' | 'audio';
+  media_url: string;
+  caption?: string;
+  filename?: string;
 }
 
 export interface TagStepConfig {
@@ -663,7 +679,7 @@ export interface Automation {
   /** NULL = fires for both WhatsApp providers. 'meta' | 'ryzeapi'
    *  scopes this automation to only that WhatsApp provider. Ignored
    *  for Instagram channel. */
-  provider?: 'meta' | 'ryzeapi' | null;
+  provider?: 'meta' | 'ryzeapi' | 'zernio' | null;
   execution_count: number;
   last_executed_at?: string | null;
   created_at: string;
@@ -783,4 +799,48 @@ export interface SocialAccount {
   username: string;
   displayName: string;
   isActive: boolean;
+}
+
+// ============================================================
+// Meta Conversions API — CAPI (migration 052)
+// ============================================================
+
+export interface MetaCapiConfig {
+  id: string;
+  account_id: string;
+  pixel_id: string | null;
+  access_token: string | null;
+  default_action_source: string;
+  event_source_url: string | null;
+  event_mapping: MetaCapiEventMapping;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MetaCapiEventMapping {
+  Lead?: {
+    trigger: 'contact_created';
+  };
+  QualifyLead?: {
+    trigger: 'tag_added';
+    tag_ids?: string[];
+  };
+  Purchase?: {
+    trigger: 'deal_won';
+  };
+}
+
+export interface MetaCapiEventRecord {
+  id: string;
+  account_id: string;
+  event_name: string;
+  contact_id: string | null;
+  deal_id: string | null;
+  event_id: string;
+  request_payload: unknown;
+  response_status: number | null;
+  response_body: unknown;
+  error_message: string | null;
+  success: boolean;
+  created_at: string;
 }

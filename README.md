@@ -121,21 +121,31 @@ cd /opt
 git clone https://github.com/douglaswbc/wacrm
 cd wacrm
 
-# Compile a imagem Docker
-docker build -t wacrm:latest .
-
 # Copie o arquivo de stack de exemplo e edite com seu domínio e secrets
 cp example.wacrm.yaml wacrm.yaml
 nano wacrm.yaml
+
+# Compile a imagem Docker com os valores REAIS do Supabase.
+# NEXT_PUBLIC_* são embutidas no bundle JavaScript do cliente em
+# tempo de build — NÃO podem ser trocadas em runtime. Os mesmos
+# valores devem estar no wacrm.yaml (para código server-side).
+docker build --no-cache \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL=https://id_projeto.supabase.co \
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key \
+  --build-arg NEXT_PUBLIC_SITE_URL=https://wacrm.seudominio.com.br \
+  -t wacrm:latest .
 
 # Faça o deploy no Swarm
 docker stack deploy -c wacrm.yaml wacrm
 ```
 
 > **Nota:** `.env.local` é apenas para **desenvolvimento local**
-> (`npm run dev`). No Docker Swarm, todas as variáveis de ambiente são
-> definidas diretamente no `wacrm.yaml` em `services.wacrm.environment`.
-> Veja `example.wacrm.yaml` para a lista completa.
+> (`npm run dev`). No Docker Swarm, as variáveis `NEXT_PUBLIC_*` precisam
+> ser passadas via `--build-arg` NO `docker build` (ficam no bundle do
+> cliente) E também no `wacrm.yaml` em `services.wacrm.environment`
+> (para código server-side como middleware e API routes). As demais
+> variáveis vão apenas no `wacrm.yaml`. Veja `example.wacrm.yaml` para
+> a lista completa.
 
 ### Variáveis de ambiente
 
@@ -202,7 +212,11 @@ git pull
 # Compare example.wacrm.yaml com seu wacrm.yaml — adicione novas env vars
 diff example.wacrm.yaml wacrm.yaml
 
-docker build -t wacrm:latest .
+docker build --no-cache \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL=https://id_projeto.supabase.co \
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key \
+  --build-arg NEXT_PUBLIC_SITE_URL=https://wacrm.seudominio.com.br \
+  -t wacrm:latest .
 docker stack deploy -c wacrm.yaml wacrm
 ```
 

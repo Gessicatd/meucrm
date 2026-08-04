@@ -478,6 +478,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              broadcast_id: broadcast.id,
               recipients: apiRecipients,
               template_name: payload.template.name,
               template_language: payload.template.language ?? 'en_US',

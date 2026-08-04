@@ -322,7 +322,7 @@ async function findEntryFlow(
   message: ParsedInbound,
   isFirstInbound: boolean,
   channel?: 'whatsapp' | 'instagram',
-  provider?: 'meta' | 'ryzeapi',
+  provider?: 'meta' | 'ryzeapi' | 'zernio',
 ): Promise<FlowRow | null> {
   // Only text messages can match an entry trigger. Interactive replies
   // are responses to existing prompts; they never start a new flow.

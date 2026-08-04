@@ -11,6 +11,7 @@ import type {
   SendMessageStepConfig,
   SendTemplateStepConfig,
   SendButtonStepConfig,
+  SendMediaStepConfig,
   SendWebhookStepConfig,
   TagStepConfig,
   UpdateContactFieldStepConfig,
@@ -19,7 +20,7 @@ import type {
   AssignConversationStepConfig,
 } from '@/types'
 import { supabaseAdmin } from './admin-client'
-import { engineSendText, engineSendTemplate, engineSendButton } from './meta-send'
+import { engineSendText, engineSendTemplate, engineSendButton, engineSendMedia } from './meta-send'
 import { generateReply } from '@/lib/ai/generate'
 import { loadAiConfig } from '@/lib/ai/config'
 import { buildConversationContext } from '@/lib/ai/context'
@@ -85,7 +86,7 @@ export interface DispatchInput {
   /** WhatsApp provider. Automations scoped to a specific WhatsApp
    *  provider (e.g. 'meta') only fire for that provider. NULL-provider
    *  automations fire for both. Ignored for non-WhatsApp channels. */
-  provider?: 'meta' | 'ryzeapi'
+  provider?: 'meta' | 'ryzeapi' | 'zernio'
 }
 
 /**
@@ -481,6 +482,26 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         buttons: cfg.buttons,
       })
       return `button message sent via Meta (${whatsapp_message_id})`
+    }
+
+    case 'send_media': {
+      const cfg = step.step_config as unknown as SendMediaStepConfig
+      if (!args.contactId) throw new Error('send_media needs a contact')
+      if (!cfg.media_url?.trim()) throw new Error('send_media needs media_url')
+      if (!['image', 'video', 'document', 'audio'].includes(cfg.media_type))
+        throw new Error('send_media needs valid media_type')
+      const conversationId = await resolveConversationId(args)
+      const { whatsapp_message_id } = await engineSendMedia({
+        accountId: args.automation.account_id,
+        userId: args.automation.user_id,
+        conversationId,
+        contactId: args.contactId,
+        mediaType: cfg.media_type as 'image' | 'video' | 'document' | 'audio',
+        mediaUrl: cfg.media_url,
+        caption: cfg.caption ? interpolate(cfg.caption, args) : undefined,
+        filename: cfg.filename,
+      })
+      return `media sent (${whatsapp_message_id})`
     }
 
     case 'add_tag': {

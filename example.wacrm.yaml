@@ -15,34 +15,34 @@ services:
       - NODE_ENV=production
 
       ## Supabase
-      - NEXT_PUBLIC_SUPABASE_URL=https://id_projeto.supabase.co
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=anon_key
-      - SUPABASE_SERVICE_ROLE_KEY=role_key
+      - NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+      - SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
       ## Criptografia e Segurança
-      - ENCRYPTION_KEY=sua_encryption_key
-      - META_APP_SECRET=secret_key_app
-      - INSTAGRAM_APP_SECRET=secret_key_instagram
+      - ENCRYPTION_KEY=your-64-char-hex-key
+      - META_APP_SECRET=your-meta-app-secret
+      - INSTAGRAM_APP_SECRET=your-instagram-app-secret
       - AUTOMATION_CRON_SECRET=generate-a-long-random-string
 
       ## Google Calendar
       - GOOGLE_CALENDAR_CLIENT_ID=your-client-id.apps.googleusercontent.com
       - GOOGLE_CALENDAR_CLIENT_SECRET=GOCSPX-your-client-secret
-      - GOOGLE_CALENDAR_REDIRECT_URI=https://wacrm.seudominio.com.br/api/calendar/callback
+      - GOOGLE_CALENDAR_REDIRECT_URI=https://wacrm.yourdomain.com/api/calendar/callback
 
       # RyzeAPI
       - RYZEAPI_API_URL=https://ryzeapi.cloud
-      - RYZEAPI_ADMIN_TOKEN=admin_token
+      - RYZEAPI_ADMIN_TOKEN=your-admin-token
 
       # Zernio Social Media Integration (Settings → Social Accounts)
-      - ZERNIO_API_KEY=sk_your-api-key-here
+      - ZERNIO_API_KEY=sk_your-zernio-api-key
 
       # Optional: webhook secret for verifying Zernio webhook deliveries.
       # Generate any long random string: openssl rand -hex 32
       - ZERNIO_WEBHOOK_SECRET=generate-a-long-random-string
 
       ## URL pública
-      - NEXT_PUBLIC_SITE_URL=https://wacrm.seudominio.com.br
+      - NEXT_PUBLIC_SITE_URL=https://wacrm.yourdomain.com
 
     deploy:
       mode: replicated
@@ -56,7 +56,7 @@ services:
           memory: 1024M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.wacrm.rule=Host(`wacrm.seudominio.com.br`)
+        - traefik.http.routers.wacrm.rule=Host(`wacrm.yourdomain.com`)
         - traefik.http.routers.wacrm.entrypoints=websecure
         - traefik.http.routers.wacrm.priority=10
         - traefik.http.routers.wacrm.tls.certresolver=letsencryptresolver

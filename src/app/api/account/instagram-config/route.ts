@@ -15,6 +15,7 @@ import { encrypt, decrypt } from "@/lib/whatsapp/encryption";
 import {
   verifyIgAccount,
   subscribeIgApp,
+  unsubscribeIgApp,
   exchangeToken,
   debugToken,
 } from "@/lib/instagram/meta-api";
@@ -298,6 +299,28 @@ export async function PUT(request: Request) {
 export async function DELETE() {
   try {
     const ctx = await requireRole("admin");
+
+    // Unsubscribe from Meta webhooks before deleting the config,
+    // so we don't leave an orphaned subscription firing into the void.
+    const rawToken = await getDecryptedToken(ctx.accountId);
+    if (rawToken) {
+      const { data: config } = await ctx.supabase
+        .from("instagram_config")
+        .select("instagram_business_account_id")
+        .eq("account_id", ctx.accountId)
+        .maybeSingle();
+
+      if (config?.instagram_business_account_id) {
+        try {
+          await unsubscribeIgApp(config.instagram_business_account_id, rawToken);
+        } catch (err) {
+          console.warn(
+            "[DELETE /api/account/instagram-config] unsubscribe failed (may be already removed):",
+            (err as Error).message,
+          );
+        }
+      }
+    }
 
     const { error } = await ctx.supabase
       .from("instagram_config")

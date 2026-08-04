@@ -5,32 +5,21 @@
 //
 // Given a conversation and message params, this:
 //   1. validates the params for the message type,
-//   2. loads the conversation + contact + WhatsApp config,
-//   3. sends to Meta (with phone-variant retry + contact auto-fix),
+//   2. loads the conversation + contact + config,
+//   3. sends via Zernio (primary) or RyzeAPI,
 //   4. persists the message + updates the conversation,
 //   5. pauses any active Flow run for the contact (agent stepped in).
 //
 // It is transport-agnostic: it takes a `SupabaseClient` and an
-// `accountId` and throws `SendMessageError` on failure. The callers
-// own auth, rate-limiting, body parsing, and mapping the error to
-// their respective response shapes (internal `{ error }` vs the v1
-// envelope). Behaviour is identical to the original inline route —
-// this is a straight extraction so the public endpoint can reuse it
-// without duplicating ~250 lines of Meta plumbing.
+// `accountId` and throws `SendMessageError` on failure.
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
-  sendTextMessage,
-  sendTemplateMessage,
-  sendMediaMessage,
-  sendInteractiveButtons,
-  sendInteractiveList,
-  type MediaKind,
-  type InteractiveButton,
-  type InteractiveListSection,
-} from '@/lib/whatsapp/meta-api';
+  sendInboxMessage,
+  createInboxConversation,
+} from '@/lib/zernio/client';
 import {
   sendText as sendRyzeText,
   sendMedia as sendRyzeMedia,
@@ -38,23 +27,10 @@ import {
   sendList as sendRyzeList,
   sendPix as sendRyzePix,
 } from '@/lib/ryzeapi/client';
-import {
-  sendTextMessage as sendInstagramText,
-  sendMediaMessage as sendInstagramMedia,
-  sendButtonTemplate as sendInstagramButton,
-  type MediaKind as InstagramMediaKind,
-} from '@/lib/instagram/meta-api';
-import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
-import { getRefreshedAccessToken } from '@/lib/instagram/token-refresh';
+import { decrypt } from '@/lib/whatsapp/encryption';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
-import {
-  sanitizePhoneForMeta,
-  isValidE164,
-  phoneVariants,
-  isRecipientNotAllowedError,
-} from '@/lib/whatsapp/phone-utils';
-import type { MessageTemplate } from '@/types';
-import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard';
+import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
+import { extractVariableIndices } from '@/lib/whatsapp/template-validators';
 
 export const MEDIA_KINDS = ['image', 'video', 'document', 'audio'] as const;
 export const INTERACTIVE_KINDS = ['buttons', 'list'] as const;
@@ -109,6 +85,8 @@ export interface SendMessageParams {
   pixItems?: { name: string; description?: string; quantity: number; unitPrice: number }[] | null;
   // Link preview for text messages
   linkPreview?: boolean | null;
+  // Sender override for bot messages (automations/flows)
+  senderType?: 'agent' | 'bot';
 }
 
 export interface SendMessageResult {
@@ -282,10 +260,10 @@ export async function sendMessageToConversation(
 
   const isMediaKind = (MEDIA_KINDS as readonly string[]).includes(messageType);
 
-  // Conversation + contact, account-scoped.
+  // Conversation + contact + Zernio routing fields, account-scoped.
   const { data: conversation, error: convError } = await db
     .from('conversations')
-    .select('*, contact:contacts(*), provider')
+    .select('*, contact:contacts(*), provider, zernio_conversation_id, zernio_account_id')
     .eq('id', conversationId)
     .eq('account_id', accountId)
     .single();
@@ -296,324 +274,61 @@ export async function sendMessageToConversation(
 
   const contact = conversation.contact;
   const channel = conversation.channel || 'whatsapp';
-  const provider = conversation.provider || 'meta';
+  const provider = conversation.provider;
+  const zernioConvId = conversation.zernio_conversation_id as string | null;
+  const zernioAcctId = conversation.zernio_account_id as string | null;
 
-  // Instagram channel — route via Instagram API.
-  if (channel === 'instagram') {
-    return sendInstagramMessage(
-      db, accountId, conversationId, contact, params,
-    );
+  // ── RyzeAPI provider ──────────────────────────────────────
+  if (provider === 'ryzeapi') {
+    if (!contact?.phone) {
+      throw new SendMessageError('bad_request', 'Contact phone number not found', 400);
+    }
+    return sendRyzeMessage(db, accountId, conversationId, contact.phone, params);
+  }
+
+  // ── Zernio provider (primary for WhatsApp + Instagram) ────
+  if (
+    provider === 'zernio' ||
+    zernioConvId ||
+    provider === 'meta' ||
+    (!provider && channel === 'instagram')
+  ) {
+    return sendZernioMessage(db, accountId, conversationId, contact, zernioConvId, zernioAcctId, params);
+  }
+
+  // ── No provider set — try Zernio connection first, then RyzeAPI ──
+  const { data: zernioConn } = await db
+    .from('zernio_connections')
+    .select('*')
+    .eq('account_id', accountId)
+    .maybeSingle();
+
+  if (zernioConn) {
+    return sendZernioMessage(db, accountId, conversationId, contact, zernioConvId, zernioAcctId, params);
   }
 
   if (!contact?.phone) {
-    throw new SendMessageError(
-      'bad_request',
-      'Contact phone number not found',
-      400
-    );
+    throw new SendMessageError('bad_request', 'Contact phone number not found', 400);
   }
 
-  const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
-  if (!isValidE164(sanitizedPhone)) {
-    throw new SendMessageError(
-      'bad_request',
-      'Invalid phone number format',
-      400
-    );
-  }
-
-  // RyzeAPI provider — route via RyzeAPI REST API instead of Meta.
-  if (provider === 'ryzeapi') {
-    return sendRyzeMessage(db, accountId, conversationId, sanitizedPhone, params);
-  }
-
-  // WhatsApp config, account-scoped.
-  const { data: config, error: configError } = await db
-    .from('whatsapp_config')
+  // Fallback to RyzeAPI if configured
+  const { data: ryzeConfig } = await db
+    .from('ryzeapi_config')
     .select('*')
     .eq('account_id', accountId)
-    .single();
+    .eq('status', 'connected')
+    .maybeSingle();
 
-  // If provider is NULL (unset) and Meta is not configured, check if
-  // RyzeAPI is available as a fallback. This lets accounts with only
-  // RyzeAPI send messages without explicitly setting provider on every
-  // conversation. When Meta is configured later, the explicit provider
-  // field takes precedence.
-  if (configError || !config) {
-    const { data: ryzeConfig } = await db
-      .from('ryzeapi_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .eq('status', 'connected')
-      .maybeSingle();
-
-    if (ryzeConfig) {
-      return sendRyzeMessage(db, accountId, conversationId, sanitizedPhone, params);
-    }
-
-    throw new SendMessageError(
-      'whatsapp_not_configured',
-      'WhatsApp not configured. Please set up your WhatsApp integration first.',
-      400
-    );
+  if (ryzeConfig) {
+    return sendRyzeMessage(db, accountId, conversationId, contact.phone, params);
   }
 
-  // PIX is only available through RyzeAPI (native WhatsApp protocol).
-  if (messageType === 'pix') {
-    throw new SendMessageError(
-      'bad_request',
-      'PIX messages are only available via the RyzeAPI provider. Meta Cloud API does not support PIX cards.',
-      400,
-    );
-  }
-
-  const accessToken = decrypt(config.access_token);
-
-  // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
-  if (isLegacyFormat(config.access_token)) {
-    void db
-      .from('whatsapp_config')
-      .update({ access_token: encrypt(accessToken) })
-      .eq('id', config.id)
-      .then(({ error }: { error: { message: string } | null }) => {
-        if (error) {
-          console.warn(
-            '[send-message] access_token GCM upgrade failed:',
-            error.message
-          );
-        }
-      });
-  }
-
-  // Resolve the reply target to its Meta message_id. The parent must
-  // belong to this same conversation — otherwise a caller could quote
-  // messages they can't see by guessing UUIDs.
-  let contextMessageId: string | undefined;
-  if (replyToMessageId) {
-    const { data: parent, error: parentError } = await db
-      .from('messages')
-      .select('message_id, conversation_id')
-      .eq('id', replyToMessageId)
-      .eq('conversation_id', conversationId)
-      .maybeSingle();
-
-    if (parentError || !parent) {
-      throw new SendMessageError(
-        'bad_request',
-        'reply_to_message_id not found in this conversation',
-        400
-      );
-    }
-    if (!parent.message_id) {
-      console.warn(
-        '[send-message] reply target has no Meta message_id; sending without context'
-      );
-    } else {
-      contextMessageId = parent.message_id;
-    }
-  }
-
-  // Template row (for header + button components). isMessageTemplate
-  // guards against a malformed local row crashing the send-builder.
-  let templateRow: MessageTemplate | null = null;
-  if (messageType === 'template' && templateName) {
-    const { data } = await db
-      .from('message_templates')
-      .select('*')
-      .eq('account_id', accountId)
-      .eq('name', templateName)
-      .eq('language', templateLanguage || 'en_US')
-      .maybeSingle();
-    if (data && !isMessageTemplate(data)) {
-      throw new SendMessageError(
-        'template_malformed',
-        'Template row is malformed locally — run "Sync from Meta" in Settings to repair it.',
-        500
-      );
-    }
-    templateRow = data ?? null;
-  }
-
-  const attempt = async (phone: string): Promise<string> => {
-    if (messageType === 'template') {
-      const result = await sendTemplateMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
-        to: phone,
-        templateName: templateName!,
-        language: templateLanguage || 'en_US',
-        template: templateRow ?? undefined,
-        messageParams: templateMessageParams ?? undefined,
-        params: templateParams || [],
-        contextMessageId,
-      });
-      return result.messageId;
-    }
-    if (messageType === 'buttons') {
-      const result = await sendInteractiveButtons({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
-        to: phone,
-        bodyText: contentText!,
-        headerText: headerText || undefined,
-        footerText: footerText || undefined,
-        buttons: (buttons ?? []).map((b) => ({ id: b.id, title: b.title })),
-        contextMessageId,
-      });
-      return result.messageId;
-    }
-    if (messageType === 'list') {
-      const result = await sendInteractiveList({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
-        to: phone,
-        bodyText: contentText!,
-        buttonLabel: buttonLabel!,
-        headerText: headerText || undefined,
-        footerText: footerText || undefined,
-        sections: (sections ?? []).map((s) => ({
-          title: s.title,
-          rows: s.rows.map((r) => ({ id: r.id, title: r.title, description: r.description })),
-        })),
-        contextMessageId,
-      });
-      return result.messageId;
-    }
-    if (isMediaKind) {
-      const result = await sendMediaMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
-        to: phone,
-        kind: messageType as MediaKind,
-        link: mediaUrl!,
-        caption: contentText || undefined,
-        filename: filename || undefined,
-        contextMessageId,
-      });
-      return result.messageId;
-    }
-    const result = await sendTextMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
-      to: phone,
-      text: contentText!,
-      contextMessageId,
-      linkPreview: linkPreview || undefined,
-    });
-    return result.messageId;
-  };
-
-  // Send via Meta — retry across phone-number variants if Meta rejects
-  // with "recipient not in allowed list"; persist a working variant
-  // back to the contact so the next send goes straight through.
-  let waMessageId = '';
-  let workingPhone = sanitizedPhone;
-  try {
-    const variants = phoneVariants(sanitizedPhone);
-    let lastError: unknown = null;
-
-    for (const variant of variants) {
-      try {
-        waMessageId = await attempt(variant);
-        workingPhone = variant;
-        lastError = null;
-        break;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (!isRecipientNotAllowedError(message)) {
-          throw err;
-        }
-        lastError = err;
-        console.warn(
-          `[send-message] variant "${variant}" rejected by Meta, trying next…`
-        );
-      }
-    }
-
-    if (lastError) throw lastError;
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : 'Unknown Meta API error';
-    console.error('[send-message] Meta send failed for all variants:', message);
-    throw new SendMessageError('meta_error', `Meta API error: ${message}`, 502);
-  }
-
-  if (workingPhone !== sanitizedPhone) {
-    console.log(
-      `[send-message] Auto-corrected contact phone: ${sanitizedPhone} → ${workingPhone}`
-    );
-    await db
-      .from('contacts')
-      .update({ phone: workingPhone })
-      .eq('id', contact.id);
-  }
-
-  // Persist the sent message. Field names MUST match the messages
-  // schema (see 001_initial_schema.sql).
-  const { data: messageRecord, error: msgError } = await db
-    .from('messages')
-    .insert({
-      account_id: accountId,
-      conversation_id: conversationId,
-      sender_type: 'agent',
-      content_type: messageType,
-      content_text: contentText || null,
-      media_url: mediaUrl || null,
-      template_name: templateName || null,
-      message_id: waMessageId,
-      status: 'sent',
-      reply_to_message_id: replyToMessageId || null,
-    })
-    .select()
-    .single();
-
-  if (msgError) {
-    console.error('[send-message] error inserting sent message:', msgError);
-    throw new SendMessageError(
-      'db_error',
-      `Message sent to Meta but failed to save to DB: ${msgError.message}`,
-      500
-    );
-  }
-
-  await db
-    .from('conversations')
-    .update({
-      last_message_text: contentText || `[${messageType}]`,
-      last_message_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', conversationId);
-
-  // Pause any active Flow run for this contact — the agent stepping in
-  // is the strongest "yield, human is here" signal. Best-effort.
-  try {
-    const { error: pauseErr } = await supabaseAdmin()
-      .from('flow_runs')
-      .update({
-        status: 'paused_by_agent',
-        ended_at: new Date().toISOString(),
-        end_reason: 'agent_replied',
-      })
-      .eq('account_id', accountId)
-      .eq('contact_id', contact.id)
-      .eq('status', 'active');
-    if (pauseErr) {
-      console.error('[flows] pause-on-agent-send failed:', pauseErr.message);
-    }
-  } catch (err) {
-    console.error(
-      '[flows] pause-on-agent-send threw:',
-      err instanceof Error ? err.message : err
-    );
-  }
-
-  return { messageId: messageRecord.id, whatsappMessageId: waMessageId };
+  throw new SendMessageError(
+    'not_configured',
+    'No messaging provider configured. Connect via Zernio or RyzeAPI in Settings.',
+    400,
+  );
 }
-
-// ----------------------------------------------------------
-// Instagram send — calls the Instagram Messaging API directly.
-// ----------------------------------------------------------
 
 async function sendRyzeMessage(
   db: SupabaseClient,
@@ -745,7 +460,7 @@ async function sendRyzeMessage(
     .insert({
       account_id: accountId,
       conversation_id: conversationId,
-      sender_type: 'agent',
+    sender_type: 'agent',
       content_type: messageType,
       content_text: contentText || null,
       media_url: mediaUrl || null,
@@ -764,6 +479,16 @@ async function sendRyzeMessage(
     );
   }
 
+  void dispatchWebhookEvent(supabaseAdmin(), accountId, 'message.sent', {
+    conversation_id: conversationId,
+    message_id: messageRecord.id,
+    sender_type: 'agent',
+    content_type: messageType,
+    text: contentText || null,
+    channel: 'whatsapp',
+    provider: 'ryzeapi',
+  }).catch((err) => console.error('[webhook] message.sent dispatch failed:', err))
+
   await db
     .from('conversations')
     .update({
@@ -776,162 +501,261 @@ async function sendRyzeMessage(
   return { messageId: messageRecord.id, whatsappMessageId: ryzeMessageId };
 }
 
-async function sendInstagramMessage(
+// ── Zernio send (primary: WhatsApp + Instagram) ────────────
+
+async function padTemplateParams(
+  db: SupabaseClient,
+  templateName: string,
+  templateLanguage: string,
+  providedParams: string[] | undefined,
+): Promise<string[]> {
+  const { data: tmpl } = await db
+    .from('message_templates')
+    .select('body_text')
+    .eq('name', templateName)
+    .eq('language', templateLanguage)
+    .maybeSingle()
+
+  const varCount = tmpl?.body_text
+    ? extractVariableIndices(tmpl.body_text).length
+    : 0
+
+  if (varCount === 0) return providedParams ?? []
+  const params = providedParams ?? []
+  while (params.length < varCount) params.push('.')
+  return params.slice(0, varCount)
+}
+
+async function sendZernioMessage(
   db: SupabaseClient,
   accountId: string,
   conversationId: string,
-  // Pre-existing: resolves from Supabase join type
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   contact: any,
+  zernioConvId: string | null,
+  zernioAcctId: string | null,
   params: SendMessageParams,
 ): Promise<SendMessageResult> {
   const {
     messageType,
     contentText,
     mediaUrl,
+    filename,
+    templateName,
+    templateLanguage,
+    templateParams,
     replyToMessageId,
     buttons,
     headerText,
     footerText,
     buttonLabel,
     sections,
+    linkPreview,
   } = params;
 
-  // PIX is not supported on Instagram.
+  // PIX only via RyzeAPI
   if (messageType === 'pix') {
     throw new SendMessageError(
       'bad_request',
-      'PIX messages are not supported for Instagram conversations.',
+      'PIX messages are only available via the RyzeAPI provider.',
       400,
     );
   }
 
-  // Load Instagram config for the account.
-  const { data: config, error: configError } = await db
-    .from('instagram_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .single();
+  // Look up Zernio routing info if not on conversation
+  let resolvedConvId = zernioConvId;
+  let resolvedAcctId = zernioAcctId;
 
-  if (configError || !config?.access_token || !config?.instagram_business_account_id) {
+  if (!resolvedConvId || !resolvedAcctId) {
+    const channel = (await db
+      .from('conversations')
+      .select('channel')
+      .eq('id', conversationId)
+      .single()
+    ).data?.channel || 'whatsapp';
+
+    const { data: conn } = await db
+      .from('zernio_connections')
+      .select('connected_accounts')
+      .eq('account_id', accountId)
+      .maybeSingle();
+
+    if (conn?.connected_accounts) {
+      const accounts = conn.connected_accounts as Array<{
+        platform: string; accountId: string;
+      }>;
+      const match = accounts.find((a) =>
+        (channel === 'instagram' && a.platform === 'instagram') ||
+        (channel === 'whatsapp' && a.platform === 'whatsapp')
+      );
+      if (match) resolvedAcctId = match.accountId;
+    }
+  }
+
+  if (!resolvedAcctId) {
     throw new SendMessageError(
-      'instagram_not_configured',
-      'Instagram not configured. Please set up Instagram integration in Settings first.',
+      'zernio_not_configured',
+      'No Zernio account connected for this channel. Connect via Settings > Social.',
       400,
     );
   }
 
-  const accessToken = await getRefreshedAccessToken(config);
-  const igUserId = config.instagram_business_account_id;
-  const igRecipientId = contact.instagram_id;
-
-  if (!igRecipientId) {
-    throw new SendMessageError(
-      'bad_request',
-      'Contact has no Instagram ID. Cannot send via Instagram.',
-      400,
-    );
-  }
-
-  // Send the message via Instagram API.
-  let igMessageId: string;
+  let zernioMsgId: string;
+  let zernioConvResultId: string | undefined;
 
   try {
-    if (messageType === 'text') {
-      const result = await sendInstagramText({
-        igUserId,
-        accessToken,
-        to: igRecipientId,
-        text: contentText || '',
+    const paddedParams = messageType === 'template' && templateName
+      ? await padTemplateParams(db, templateName, templateLanguage || 'en_US', templateParams)
+      : []
+
+    if (messageType === 'template' && templateName && !resolvedConvId) {
+      const phone = contact?.phone || contact?.instagram_id || '';
+      const result = await createInboxConversation({
+        zernioAccountId: resolvedAcctId,
+        participantId: phone,
+        templateName,
+        templateLanguage: templateLanguage || 'en_US',
+        templateParams: paddedParams,
       });
-      igMessageId = result.messageId;
-    } else if (messageType === 'image' || messageType === 'video' || messageType === 'audio') {
-      if (!mediaUrl) {
-        throw new SendMessageError(
-          'bad_request',
-          `Media URL required for ${messageType} messages`,
-          400,
-        );
+      zernioMsgId = result.messageId;
+      zernioConvResultId = result.conversationId;
+    } else if (messageType === 'template' && templateName && resolvedConvId) {
+      const element: { name: string; language: string; components?: Array<{ type: string; parameters?: Array<{ type: string; text?: string }> }> } = {
+        name: templateName,
+        language: templateLanguage || 'en_US',
+      };
+      if (paddedParams.length > 0) {
+        element.components = [{
+          type: 'body',
+          parameters: paddedParams.map((p) => ({ type: 'text', text: p })),
+        }];
       }
-      const result = await sendInstagramMedia({
-        igUserId,
-        accessToken,
-        to: igRecipientId,
-        kind: messageType as InstagramMediaKind,
-        link: mediaUrl,
-        caption: contentText || undefined,
+      const result = await sendInboxMessage({
+        zernioConversationId: resolvedConvId,
+        zernioAccountId: resolvedAcctId,
+        template: { elements: [element] },
       });
-      igMessageId = result.messageId;
-    } else if (messageType === 'document') {
-      if (!mediaUrl) {
-        throw new SendMessageError(
-          'bad_request',
-          'Media URL required for document messages',
-          400,
-        );
-      }
-      // Documents/PDFs render better as a button template on Instagram
-      // — the recipient sees a clear CTA button instead of a raw link.
-      const buttonLabel = contentText ? 'Download' : 'Open file'
-      const buttonText = contentText || 'File attached'
-      const result = await sendInstagramButton({
-        igUserId,
-        accessToken,
-        to: igRecipientId,
-        text: buttonText,
-        buttons: [
-          { type: 'web_url', url: mediaUrl, title: buttonLabel },
-        ],
-      });
-      igMessageId = result.messageId;
+      zernioMsgId = result.messageId;
     } else if (messageType === 'buttons') {
-      const result = await sendInstagramButton({
-        igUserId,
-        accessToken,
-        to: igRecipientId,
+      const result = await sendInboxMessage({
+        zernioConversationId: resolvedConvId!,
+        zernioAccountId: resolvedAcctId,
         text: contentText || '',
-        buttons: (buttons ?? []).map((b) => ({
-          type: 'web_url' as const,
-          url: `https://wacrm.reply/${b.id}`,
-          title: b.title,
-        })),
+        buttons: (buttons ?? []).map((b) => ({ title: b.title, payload: b.id })),
       });
-      igMessageId = result.messageId;
+      zernioMsgId = result.messageId;
     } else if (messageType === 'list') {
-      const result = await sendInstagramText({
-        igUserId,
-        accessToken,
-        to: igRecipientId,
-        text: `${contentText || ''}\n\n${(sections ?? []).flatMap((s) => s.rows.map((r, i) => `${i + 1}. ${r.title}${r.description ? ` — ${r.description}` : ''}`)).join('\n')}`,
+      const result = await sendInboxMessage({
+        zernioConversationId: resolvedConvId!,
+        zernioAccountId: resolvedAcctId,
+        interactive: {
+          type: 'list',
+          body: { text: contentText! },
+          header: headerText ? { type: 'text', text: headerText } : undefined,
+          footer: footerText ? { text: footerText } : undefined,
+          action: {
+            button: buttonLabel || 'View',
+            sections: (sections ?? []).map((s) => ({
+              title: s.title,
+              rows: s.rows.map((r) => ({ id: r.id, title: r.title, description: r.description })),
+            })),
+          },
+        },
       });
-      igMessageId = result.messageId;
+      zernioMsgId = result.messageId;
+    } else if (['image', 'video', 'audio', 'document'].includes(messageType)) {
+      const result = await sendInboxMessage({
+        zernioConversationId: resolvedConvId!,
+        zernioAccountId: resolvedAcctId,
+        text: contentText || undefined,
+        attachmentUrl: mediaUrl!,
+        attachmentType: messageType as 'image' | 'video' | 'audio',
+        attachmentName: messageType === 'document' ? (filename || 'file') : undefined,
+        voiceNote: messageType === 'audio' ? true : undefined,
+      });
+      zernioMsgId = result.messageId;
     } else {
-      // Unsupported message type — fall back to text with a note.
-      const result = await sendInstagramText({
-        igUserId,
-        accessToken,
-        to: igRecipientId,
-        text: contentText || `[${messageType}]`,
+      if (!resolvedConvId) {
+        const phone = contact?.phone || contact?.instagram_id || '';
+        if (!phone) {
+          throw new SendMessageError(
+            'bad_request',
+            'Cannot send message: no participant identifier (phone or instagram_id) for this contact.',
+            400,
+          );
+        }
+        const result = await createInboxConversation({
+          zernioAccountId: resolvedAcctId,
+          participantId: phone,
+          templateName: templateName || 'hello_world',
+          templateLanguage: templateLanguage || 'en_US',
+        });
+        zernioMsgId = result.messageId;
+        zernioConvResultId = result.conversationId;
+        resolvedConvId = result.conversationId;
+      }
+      const result = await sendInboxMessage({
+        zernioConversationId: resolvedConvId!,
+        zernioAccountId: resolvedAcctId,
+        text: contentText!,
       });
-      igMessageId = result.messageId;
+      zernioMsgId = result.messageId;
+    }
+
+    // Store the Zernio conversation ID if newly created
+    if (zernioConvResultId) {
+      await db
+        .from('conversations')
+        .update({
+          zernio_conversation_id: zernioConvResultId,
+          zernio_account_id: resolvedAcctId,
+          provider: 'zernio',
+        })
+        .eq('id', conversationId);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown Instagram API error';
-    console.error('[send-message] Instagram send failed:', message);
-    throw new SendMessageError('instagram_error', `Instagram API error: ${message}`, 502);
+    const message = err instanceof Error ? err.message : 'Unknown Zernio error';
+    console.error('[send-message] Zernio send failed:', message);
+    throw new SendMessageError('zernio_error', `Zernio error: ${message}`, 502);
   }
 
-  // Persist the sent message.
+  return persistSentMessage(db, accountId, conversationId, contact, zernioMsgId, params, 'zernio');
+}
+
+// ── Persist sent message to DB (shared helper) ─────────────
+
+async function persistSentMessage(
+  db: SupabaseClient,
+  accountId: string,
+  conversationId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  contact: any,
+  platformMessageId: string,
+  params: SendMessageParams,
+  provider: string,
+): Promise<SendMessageResult> {
+  const { messageType, contentText, mediaUrl, templateName, replyToMessageId, senderType } = params;
+  const effectiveSenderType = senderType || 'agent';
+
+  const channel = (
+    await db
+      .from('conversations')
+      .select('channel')
+      .eq('id', conversationId)
+      .single()
+  ).data?.channel || 'whatsapp';
+
   const { data: messageRecord, error: msgError } = await db
     .from('messages')
     .insert({
       account_id: accountId,
       conversation_id: conversationId,
-      sender_type: 'agent',
+      sender_type: effectiveSenderType,
       content_type: messageType,
       content_text: contentText || null,
       media_url: mediaUrl || null,
-      message_id: igMessageId,
+      template_name: templateName || null,
+      message_id: platformMessageId,
       status: 'sent',
       reply_to_message_id: replyToMessageId || null,
     })
@@ -939,13 +763,23 @@ async function sendInstagramMessage(
     .single();
 
   if (msgError) {
-    console.error('[send-message] Instagram: error inserting sent message:', msgError);
+    console.error('[send-message] error inserting sent message:', msgError);
     throw new SendMessageError(
       'db_error',
-      `Message sent to Instagram but failed to save to DB: ${msgError.message}`,
+      `Message sent but failed to save to DB: ${msgError.message}`,
       500,
     );
   }
+
+  void dispatchWebhookEvent(supabaseAdmin(), accountId, 'message.sent', {
+    conversation_id: conversationId,
+    message_id: messageRecord.id,
+    sender_type: effectiveSenderType,
+    content_type: messageType,
+    text: contentText || null,
+    channel,
+    provider,
+  }).catch((err) => console.error('[webhook] message.sent dispatch failed:', err));
 
   await db
     .from('conversations')
@@ -956,5 +790,41 @@ async function sendInstagramMessage(
     })
     .eq('id', conversationId);
 
-  return { messageId: messageRecord.id, whatsappMessageId: igMessageId };
+  try {
+    const { error: pauseErr } = await supabaseAdmin()
+      .from('flow_runs')
+      .update({
+        status: 'paused_by_agent',
+        ended_at: new Date().toISOString(),
+        end_reason: 'agent_replied',
+      })
+      .eq('account_id', accountId)
+      .eq('contact_id', contact.id)
+      .eq('status', 'active');
+    if (pauseErr) {
+      console.error('[flows] pause-on-agent-send failed:', pauseErr.message);
+    }
+  } catch (err) {
+    console.error(
+      '[flows] pause-on-agent-send threw:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // Also disable AI auto-reply for this conversation — a human stepped in.
+  if (effectiveSenderType === 'agent') {
+    try {
+      await db
+        .from('conversations')
+        .update({ ai_autoreply_disabled: true, ai_autoreply_disabled_at: new Date().toISOString() })
+        .eq('id', conversationId);
+    } catch (err) {
+      console.error(
+        '[send-message] ai-pause-on-agent-send failed:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return { messageId: messageRecord.id, whatsappMessageId: platformMessageId };
 }

@@ -1,21 +1,21 @@
 /**
  * Translate our local template row shape into the `components` array
- * shape that Meta's POST /{waba_id}/message_templates endpoint expects.
+ * shape that Zernio's POST /whatsapp/templates endpoint expects.
+ *
+ * Zernio uses lowercase component discriminators (header / body /
+ * footer / buttons), unlike Meta's Graph API which uses uppercase.
  *
  * Keep this function pure and JSON-shaped — the submit route and the
- * (future) edit route both call it, and unit tests assert the exact
- * payload by snapshot.
- *
- * Spec reference:
- *   https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates/components
+ * edit route both call it, and unit tests assert the exact payload
+ * by snapshot.
  */
 
 import type { TemplatePayload } from './template-validators';
 import type { TemplateButton } from '@/types';
 
 export interface MetaComponent {
-  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
-  format?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  type: 'header' | 'body' | 'footer' | 'buttons';
+  format?: 'text' | 'image' | 'video' | 'document';
   text?: string;
   buttons?: MetaButtonPayload[];
   example?: {
@@ -27,7 +27,7 @@ export interface MetaComponent {
 }
 
 interface MetaButtonPayload {
-  type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'COPY_CODE';
+  type: 'quick_reply' | 'url' | 'phone_number' | 'copy_code';
   text: string;
   url?: string;
   phone_number?: string;
@@ -41,8 +41,8 @@ function buildHeaderComponent(payload: TemplatePayload): MetaComponent | null {
   if (header_type === 'text') {
     const headerSample = payload.sample_values?.header;
     const component: MetaComponent = {
-      type: 'HEADER',
-      format: 'TEXT',
+      type: 'header',
+      format: 'text',
       text: header_content,
     };
     if (headerSample && headerSample.length > 0) {
@@ -53,11 +53,11 @@ function buildHeaderComponent(payload: TemplatePayload): MetaComponent | null {
 
   const format =
     header_type === 'image'
-      ? 'IMAGE'
+      ? 'image'
       : header_type === 'video'
-        ? 'VIDEO'
-        : 'DOCUMENT';
-  const component: MetaComponent = { type: 'HEADER', format };
+        ? 'video'
+        : 'document' as const;
+  const component: MetaComponent = { type: 'header', format };
   if (header_handle) {
     component.example = { header_handle: [header_handle] };
   } else if (header_media_url) {
@@ -68,14 +68,11 @@ function buildHeaderComponent(payload: TemplatePayload): MetaComponent | null {
 
 function buildBodyComponent(payload: TemplatePayload): MetaComponent {
   const component: MetaComponent = {
-    type: 'BODY',
+    type: 'body',
     text: payload.body_text,
   };
   const bodySample = payload.sample_values?.body;
   if (bodySample && bodySample.length > 0) {
-    // Meta expects body_text as a 2D array — outer is "examples",
-    // inner is the values for each variable. We submit a single
-    // example row.
     component.example = { body_text: [bodySample] };
   }
   return component;
@@ -83,16 +80,16 @@ function buildBodyComponent(payload: TemplatePayload): MetaComponent {
 
 function buildFooterComponent(payload: TemplatePayload): MetaComponent | null {
   if (!payload.footer_text?.trim()) return null;
-  return { type: 'FOOTER', text: payload.footer_text };
+  return { type: 'footer', text: payload.footer_text };
 }
 
 function buildButtonPayload(b: TemplateButton): MetaButtonPayload {
   switch (b.type) {
     case 'QUICK_REPLY':
-      return { type: 'QUICK_REPLY', text: b.text };
+      return { type: 'quick_reply', text: b.text };
     case 'URL': {
       const payload: MetaButtonPayload = {
-        type: 'URL',
+        type: 'url',
         text: b.text,
         url: b.url,
       };
@@ -100,16 +97,16 @@ function buildButtonPayload(b: TemplateButton): MetaButtonPayload {
       return payload;
     }
     case 'PHONE_NUMBER':
-      return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone_number };
+      return { type: 'phone_number', text: b.text, phone_number: b.phone_number };
     case 'COPY_CODE':
-      return { type: 'COPY_CODE', text: b.text, example: [b.example] };
+      return { type: 'copy_code', text: b.text, example: [b.example] };
   }
 }
 
 function buildButtonsComponent(payload: TemplatePayload): MetaComponent | null {
   if (!payload.buttons || payload.buttons.length === 0) return null;
   return {
-    type: 'BUTTONS',
+    type: 'buttons',
     buttons: payload.buttons.map(buildButtonPayload),
   };
 }

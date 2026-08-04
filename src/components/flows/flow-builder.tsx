@@ -322,6 +322,7 @@ function TriggerPanel({
           </div>
         )}
       </div>
+
       <div className="mt-3">
         <label className="text-muted-foreground mb-1 block text-xs">
           Channel
@@ -638,3 +639,4 @@ function AddNodeButton({ onAdd }: { onAdd: (type: NodeType) => void }) {
     </DropdownMenu>
   );
 }
+

@@ -335,6 +335,33 @@ export async function subscribeIgApp(
 }
 
 /**
+ * DELETE /{ig-user-id}/subscribed_apps
+ *
+ * Unsubscribe the Instagram Business Account from webhook events.
+ * This is the counterpart of subscribeIgApp — call it during config
+ * removal to prevent orphaned webhook subscriptions.
+ */
+export async function unsubscribeIgApp(
+  igUserId: string,
+  accessToken: string,
+): Promise<{ success: boolean }> {
+  const url = `${INSTAGRAM_API_BASE}/${igUserId}/subscribed_apps?access_token=${accessToken}`
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    await throwInstagramError(response, `Instagram unsubscribe error: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+/**
  * Check which fields the Instagram Business Account is subscribed to.
  *
  * GET /{ig-user-id}/subscribed_apps

@@ -17,7 +17,7 @@ describe('buildMetaTemplatePayload', () => {
       category: 'UTILITY',
       language: 'en_US',
       components: [
-        { type: 'BODY', text: 'Your order is on its way.' },
+        { type: 'body', text: 'Your order is on its way.' },
       ],
     });
   });
@@ -28,7 +28,7 @@ describe('buildMetaTemplatePayload', () => {
       body_text: 'Hi {{1}}, order {{2}}.',
       sample_values: { body: ['John', 'ORD-42'] },
     });
-    const body = payload.components.find((c) => c.type === 'BODY');
+    const body = payload.components.find((c) => c.type === 'body');
     expect(body?.example?.body_text).toEqual([['John', 'ORD-42']]);
   });
 
@@ -40,8 +40,8 @@ describe('buildMetaTemplatePayload', () => {
       sample_values: { header: ['Sara'] },
     });
     expect(payload.components[0]).toEqual({
-      type: 'HEADER',
-      format: 'TEXT',
+      type: 'header',
+      format: 'text',
       text: 'Hello {{1}}',
       example: { header_text: ['Sara'] },
     });
@@ -54,8 +54,8 @@ describe('buildMetaTemplatePayload', () => {
       header_media_url: 'https://example.com/img.jpg',
     });
     expect(payload.components[0]).toEqual({
-      type: 'HEADER',
-      format: 'IMAGE',
+      type: 'header',
+      format: 'image',
       example: { header_url: ['https://example.com/img.jpg'] },
     });
   });
@@ -68,8 +68,8 @@ describe('buildMetaTemplatePayload', () => {
       header_media_url: 'https://example.com/v.mp4',
     });
     expect(payload.components[0]).toEqual({
-      type: 'HEADER',
-      format: 'VIDEO',
+      type: 'header',
+      format: 'video',
       example: { header_handle: ['4::aW1...'] },
     });
   });
@@ -81,12 +81,12 @@ describe('buildMetaTemplatePayload', () => {
     });
     expect(
       withFooter.components.some(
-        (c) => c.type === 'FOOTER' && c.text === 'Reply STOP to opt out',
+        (c) => c.type === 'footer' && c.text === 'Reply STOP to opt out',
       ),
     ).toBe(true);
 
     const withoutFooter = buildMetaTemplatePayload({ ...base, footer_text: '' });
-    expect(withoutFooter.components.some((c) => c.type === 'FOOTER')).toBe(false);
+    expect(withoutFooter.components.some((c) => c.type === 'footer')).toBe(false);
   });
 
   it('emits the buttons component with correct per-type fields', () => {
@@ -99,16 +99,16 @@ describe('buildMetaTemplatePayload', () => {
         { type: 'COPY_CODE', text: 'Copy', example: 'SUMMER20' },
       ],
     });
-    const buttons = payload.components.find((c) => c.type === 'BUTTONS');
+    const buttons = payload.components.find((c) => c.type === 'buttons');
     expect(buttons?.buttons).toEqual([
-      { type: 'QUICK_REPLY', text: 'Yes' },
-      { type: 'URL', text: 'Track', url: 'https://x/{{1}}', example: ['abc'] },
-      { type: 'PHONE_NUMBER', text: 'Call', phone_number: '+15551234567' },
-      { type: 'COPY_CODE', text: 'Copy', example: ['SUMMER20'] },
+      { type: 'quick_reply', text: 'Yes' },
+      { type: 'url', text: 'Track', url: 'https://x/{{1}}', example: ['abc'] },
+      { type: 'phone_number', text: 'Call', phone_number: '+15551234567' },
+      { type: 'copy_code', text: 'Copy', example: ['SUMMER20'] },
     ]);
   });
 
-  it('orders components HEADER → BODY → FOOTER → BUTTONS', () => {
+  it('orders components header → body → footer → buttons', () => {
     const payload = buildMetaTemplatePayload({
       ...base,
       header_type: 'text',
@@ -117,10 +117,10 @@ describe('buildMetaTemplatePayload', () => {
       buttons: [{ type: 'QUICK_REPLY', text: 'Yes' }],
     });
     expect(payload.components.map((c) => c.type)).toEqual([
-      'HEADER',
-      'BODY',
-      'FOOTER',
-      'BUTTONS',
+      'header',
+      'body',
+      'footer',
+      'buttons',
     ]);
   });
 });

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { autoCreateDealForContact } from '@/lib/deals/auto-create';
 import { toast } from 'sonner';
 import type { Contact, Tag, ContactTag } from '@/types';
 import {
@@ -173,6 +174,9 @@ export function ContactForm({
           .single();
         if (error) throw error;
         contactId = data.id;
+
+        // Auto-create deal for new contact
+        void autoCreateDealForContact(supabase, accountId!, user.id, contactId!, name || null);
       }
 
       // Sync tags

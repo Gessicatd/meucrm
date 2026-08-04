@@ -25,10 +25,12 @@ export function SettingsRail({
   active,
   onSelect,
   hints,
+  enabledFeatures,
 }: {
   active: SettingsSection;
   onSelect: (section: SettingsSection) => void;
   hints?: Partial<Record<SettingsSection, ReactNode>>;
+  enabledFeatures?: Set<string>;
 }) {
   const activeRef = useRef<HTMLButtonElement>(null);
 
@@ -54,9 +56,15 @@ export function SettingsRail({
       )}
     >
       {RAIL_GROUPS.map(({ label, group }) => {
-        const items = SETTINGS_SECTIONS.filter(
+        const allItems = SETTINGS_SECTIONS.filter(
           (s) => SECTION_META[s].group === group,
         );
+        const visibleItems = allItems.filter(
+          (s) => !SECTION_META[s].hidden,
+        );
+        const items = enabledFeatures && group === 'workspace'
+          ? visibleItems.filter((s) => enabledFeatures.has(s))
+          : visibleItems;
         return (
           <div
             key={group}

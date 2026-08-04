@@ -23,7 +23,7 @@ export function toNetworkError(err: unknown): AiError {
   const msg = err instanceof Error ? err.message : String(err)
   return new AiError(`Could not reach the AI provider: ${msg}`, {
     code: 'network_error',
-    status: 502,
+    status: 500,
   })
 }
 
@@ -62,7 +62,7 @@ export async function providerHttpError(
     code,
     // Surface an auth failure as 401 so the settings "Test key" button
     // can show "invalid key"; everything else is an upstream 502.
-    status: code === 'invalid_key' ? 401 : 502,
+    status: code === 'invalid_key' ? 401 : 500,
   })
 }
 

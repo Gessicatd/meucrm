@@ -29,7 +29,7 @@ export async function GET() {
       // `api_key` is selected only to derive `has_key` — it is stripped
       // out below and never returned to the client.
       .select(
-        'provider, model, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, api_key',
+        'provider, model, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_pause_mode, auto_reply_pause_minutes, api_key',
       )
       .eq('account_id', accountId)
       .maybeSingle()
@@ -87,6 +87,12 @@ export async function POST(request: Request) {
     if (!Number.isFinite(maxPer)) maxPer = 3
     maxPer = Math.min(20, Math.max(1, Math.floor(maxPer)))
 
+    const pauseMode = body.auto_reply_pause_mode === 'timed' ? 'timed' : 'manual'
+
+    let pauseMinutes = Number(body.auto_reply_pause_minutes)
+    if (!Number.isFinite(pauseMinutes)) pauseMinutes = 60
+    pauseMinutes = Math.min(10080, Math.max(1, Math.floor(pauseMinutes)))
+
     const rawKey = typeof body.api_key === 'string' ? body.api_key.trim() : ''
 
     // Reuse the stored key when the form didn't send a fresh one.
@@ -129,6 +135,8 @@ export async function POST(request: Request) {
           isActive,
           autoReplyEnabled,
           autoReplyMaxPerConversation: maxPer,
+          autoReplyPauseMode: pauseMode,
+          autoReplyPauseMinutes: pauseMinutes,
         })
       } catch (err) {
         if (err instanceof AiError) {
@@ -150,6 +158,8 @@ export async function POST(request: Request) {
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
       auto_reply_max_per_conversation: maxPer,
+      auto_reply_pause_mode: pauseMode,
+      auto_reply_pause_minutes: pauseMinutes,
     }
 
     if (existing) {

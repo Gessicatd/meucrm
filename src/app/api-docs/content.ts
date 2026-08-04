@@ -101,7 +101,19 @@ curl -X POST https://your-crm.example.com/api/v1/messages \\
     ]
   }'
 
-# PIX payment (RyzeAPI only)
+# PIX payment — simple (RyzeAPI only)
+curl -X POST https://your-crm.example.com/api/v1/messages \\
+  -H "Authorization: Bearer wacrm_live_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": "+14155550123",
+    "type": "pix",
+    "pix_key": "12345678000199",
+    "pix_key_type": "CNPJ",
+    "merchant_name": "Acme Store"
+  }'
+
+# PIX payment — with order items (RyzeAPI only)
 curl -X POST https://your-crm.example.com/api/v1/messages \\
   -H "Authorization: Bearer wacrm_live_xxx" \\
   -H "Content-Type: application/json" \\
@@ -159,6 +171,26 @@ curl -X POST https://your-crm.example.com/api/v1/messages \\
     "to": "+14155550123",
     "type": "audio",
     "media_url": "https://example.com/audio/voice-note.ogg"
+  }'
+
+# Interactive list (RyzeAPI)
+curl -X POST https://your-crm.example.com/api/v1/messages \\
+  -H "Authorization: Bearer wacrm_live_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": "+14155550123",
+    "type": "list",
+    "text": "Select an item:",
+    "button_label": "View options",
+    "sections": [
+      {
+        "title": "Dishes",
+        "rows": [
+          { "id": "p1", "title": "Lasagna", "description": "4 slices" },
+          { "id": "p2", "title": "Risotto", "description": "Funghi" }
+        ]
+      }
+    ]
   }'`,
   json: `{
   "data": {
@@ -172,6 +204,7 @@ curl -X POST https://your-crm.example.com/api/v1/messages \\
   notes: [
     'Domain error codes: whatsapp_not_configured (400), meta_error (502), template_malformed (500), ryzeapi_not_configured (400), ryzeapi_error (502), instagram_not_configured (400), instagram_error (502)',
     'PIX messages are only available via the RyzeAPI provider (native WhatsApp protocol). Meta Cloud API does not support PIX cards.',
+    'Interactive list and button messages are available via the RyzeAPI provider. Use "buttons" or "list" as the message type with the "buttons" / "sections" / "button_label" fields.',
   ],
 };
 
@@ -935,52 +968,57 @@ const groupsList: EndpointDoc = {
 
 const groupsManageParticipants: EndpointDoc = {
   method: 'POST',
-  path: '/api/v1/groups/{id}/participants',
+  path: '/api/v1/groups/participants',
   scopes: ['conversations:write'],
   description: {
-    pt: 'Gerencia participantes de um grupo do WhatsApp. Ações suportadas: add (adicionar), approve (aprovar solicitação), reject (rejeitar solicitação), remove (remover). O {id} é o JID do grupo (ex: 120363406289005073@g.us).',
-    es: 'Gestiona participantes de un grupo de WhatsApp. Acciones soportadas: add (añadir), approve (aprobar solicitud), reject (rechazar solicitud), remove (eliminar). El {id} es el JID del grupo (ej: 120363406289005073@g.us).',
-    en: 'Manage participants in a WhatsApp group. Supported actions: add, approve (approve request), reject (reject request), remove. The {id} is the group JID (e.g. 120363406289005073@g.us).',
+    pt: 'Gerencia participantes de um grupo do WhatsApp. Ações suportadas: add (adicionar), approve (aprovar solicitação), reject (rejeitar solicitação), remove (remover). O group_id é o JID do grupo (ex: 120363406289005073@g.us) — passe no body, sem encoding.',
+    es: 'Gestiona participantes de un grupo de WhatsApp. Acciones soportadas: add (añadir), approve (aprobar solicitud), reject (rechazar solicitud), remove (eliminar). El group_id es el JID del grupo (ej: 120363406289005073@g.us) — pase en el body, sin encoding.',
+    en: 'Manage participants in a WhatsApp group. Supported actions: add, approve (approve request), reject (reject request), remove. The group_id is the group JID (e.g. 120363406289005073@g.us) — pass in the body, no encoding needed.',
   },
   details: [
+    'All parameters are in the JSON body — no URL encoding needed for group JIDs.',
     'action must be one of: add, approve, reject, remove.',
     'participants is an array of phone numbers (E.164) or JIDs.',
     'For add/remove: use phone numbers like "5511999999999".',
     'For approve/reject: use LIDs like "199789077627112@lid" from pending requests.',
-    'The group identifier {id} must be the full JID (ends with @g.us).',
+    'The group_id must be the full JID (ends with @g.us).',
   ],
   curl: `# Add participants
-curl -X POST https://your-crm.example.com/api/v1/groups/120363406289005073%40g.us/participants \\
+curl -X POST https://your-crm.example.com/api/v1/groups/participants \\
   -H "Authorization: Bearer wacrm_live_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{
+    "group_id": "120363406289005073@g.us",
     "action": "add",
     "participants": ["5511999999999", "5521988888888"]
   }'
 
 # Approve pending requests
-curl -X POST https://your-crm.example.com/api/v1/groups/120363406289005073%40g.us/participants \\
+curl -X POST https://your-crm.example.com/api/v1/groups/participants \\
   -H "Authorization: Bearer wacrm_live_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{
+    "group_id": "120363406289005073@g.us",
     "action": "approve",
     "participants": ["199789077627112@lid"]
   }'
 
 # Reject pending requests
-curl -X POST https://your-crm.example.com/api/v1/groups/120363406289005073%40g.us/participants \\
+curl -X POST https://your-crm.example.com/api/v1/groups/participants \\
   -H "Authorization: Bearer wacrm_live_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{
+    "group_id": "120363406289005073@g.us",
     "action": "reject",
     "participants": ["5511999999999"]
   }'
 
 # Remove participants
-curl -X POST https://your-crm.example.com/api/v1/groups/120363406289005073%40g.us/participants \\
+curl -X POST https://your-crm.example.com/api/v1/groups/participants \\
   -H "Authorization: Bearer wacrm_live_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{
+    "group_id": "120363406289005073@g.us",
     "action": "remove",
     "participants": ["5511999999999"]
   }'`,
@@ -993,7 +1031,7 @@ curl -X POST https://your-crm.example.com/api/v1/groups/120363406289005073%40g.u
   }
 }`,
   notes: [
-    'Group JID in the URL path must be URL-encoded: @ becomes %40.',
+    'All parameters are in the request body. No URL encoding needed for group JIDs.',
     'Only available when RyzeAPI provider is configured and connected.',
   ],
 };

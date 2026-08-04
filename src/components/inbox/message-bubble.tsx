@@ -191,20 +191,30 @@ function MessageContent({ message }: { message: Message }) {
         </a>
       );
 
-    case "template":
+    case "template": {
+      const label = message.template_name
+        ? `Template: ${message.template_name}`
+        : "Template";
+      const isBot = message.sender_type === "bot";
       return (
         <div>
           <span className="mb-1 inline-flex items-center gap-1 rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
             <LayoutTemplate className="h-3 w-3" />
-            Template
+            {label}
           </span>
           {message.content_text && (
             <p className="mt-1 whitespace-pre-wrap break-words text-sm">
               {message.content_text}
             </p>
           )}
+          {isBot && !message.content_text && (
+            <p className="mt-1 text-xs text-muted-foreground italic">
+              Sent via broadcast
+            </p>
+          )}
         </div>
       );
+    }
 
     case "location":
       return (

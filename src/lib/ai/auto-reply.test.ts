@@ -73,6 +73,8 @@ function aiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
     isActive: true,
     autoReplyEnabled: true,
     autoReplyMaxPerConversation: 3,
+    autoReplyPauseMode: 'manual',
+    autoReplyPauseMinutes: 60,
     ...overrides,
   }
 }
@@ -81,6 +83,7 @@ beforeEach(() => {
   h.state.conv = {
     assigned_agent_id: null,
     ai_autoreply_disabled: false,
+    ai_autoreply_disabled_at: null,
     ai_reply_count: 0,
   }
   h.state.autoResponders = []
@@ -139,6 +142,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     h.state.conv = {
       assigned_agent_id: 'agent-9',
       ai_autoreply_disabled: false,
+      ai_autoreply_disabled_at: null,
       ai_reply_count: 0,
     }
     await dispatchInboundToAiReply(ARGS)
@@ -149,6 +153,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     h.state.conv = {
       assigned_agent_id: null,
       ai_autoreply_disabled: true,
+      ai_autoreply_disabled_at: null,
       ai_reply_count: 0,
     }
     await dispatchInboundToAiReply(ARGS)
@@ -159,6 +164,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     h.state.conv = {
       assigned_agent_id: null,
       ai_autoreply_disabled: false,
+      ai_autoreply_disabled_at: null,
       ai_reply_count: 3,
     }
     await dispatchInboundToAiReply(ARGS)
@@ -180,5 +186,43 @@ describe('dispatchInboundToAiReply — handoff', () => {
     expect(h.engineSendText).not.toHaveBeenCalled()
     expect(h.state.updatePayload).toEqual({ ai_autoreply_disabled: true })
     expect(h.state.rpcCalls).toHaveLength(0)
+  })
+})
+
+describe('dispatchInboundToAiReply — ai pause on human intervention', () => {
+  it('manual mode: skips when disabled, regardless of how old', async () => {
+    h.loadAiConfig.mockResolvedValue(aiConfig({ autoReplyPauseMode: 'manual' }))
+    h.state.conv = {
+      assigned_agent_id: null,
+      ai_autoreply_disabled: true,
+      ai_autoreply_disabled_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      ai_reply_count: 0,
+    }
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.engineSendText).not.toHaveBeenCalled()
+  })
+
+  it('timed mode: re-enables when the pause window has expired', async () => {
+    h.loadAiConfig.mockResolvedValue(aiConfig({ autoReplyPauseMode: 'timed', autoReplyPauseMinutes: 60 }))
+    h.state.conv = {
+      assigned_agent_id: null,
+      ai_autoreply_disabled: true,
+      ai_autoreply_disabled_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      ai_reply_count: 0,
+    }
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.engineSendText).toHaveBeenCalled()
+  })
+
+  it('timed mode: skips when the pause window is still active', async () => {
+    h.loadAiConfig.mockResolvedValue(aiConfig({ autoReplyPauseMode: 'timed', autoReplyPauseMinutes: 60 }))
+    h.state.conv = {
+      assigned_agent_id: null,
+      ai_autoreply_disabled: true,
+      ai_autoreply_disabled_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      ai_reply_count: 0,
+    }
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.engineSendText).not.toHaveBeenCalled()
   })
 })

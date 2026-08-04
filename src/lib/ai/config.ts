@@ -10,10 +10,12 @@ interface AiConfigRow {
   is_active: boolean
   auto_reply_enabled: boolean
   auto_reply_max_per_conversation: number
+  auto_reply_pause_mode: 'manual' | 'timed'
+  auto_reply_pause_minutes: number
 }
 
 const CONFIG_COLUMNS =
-  'provider, model, api_key, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation'
+  'provider, model, api_key, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_pause_mode, auto_reply_pause_minutes'
 
 /**
  * Load and decrypt the account's AI config for *use* (draft or
@@ -54,5 +56,7 @@ export async function loadAiConfig(
     isActive: row.is_active,
     autoReplyEnabled: row.auto_reply_enabled,
     autoReplyMaxPerConversation: row.auto_reply_max_per_conversation,
+    autoReplyPauseMode: row.auto_reply_pause_mode,
+    autoReplyPauseMinutes: row.auto_reply_pause_minutes,
   }
 }

@@ -25,11 +25,6 @@ interface OverviewCounts {
   customFields: number | null;
 }
 
-interface WhatsAppStatus {
-  configured: boolean;
-  connected: boolean;
-}
-
 export function SettingsOverview({
   onSelect,
 }: {
@@ -41,12 +36,8 @@ export function SettingsOverview({
 
   const [counts, setCounts] = useState<OverviewCounts | null>(null);
   const [countsLoading, setCountsLoading] = useState(true);
-  // WhatsApp status is tracked separately: its health check decrypts the
-  // token and pings Meta, which is far slower than the cheap count
-  // queries. Gating it independently keeps a slow/flaky Meta round-trip
-  // from blanking the rest of the landing.
-  const [whatsapp, setWhatsapp] = useState<WhatsAppStatus | null>(null);
-  const [whatsappLoading, setWhatsappLoading] = useState(true);
+  const [zernioConnected, setZernioConnected] = useState(false);
+  const [zernioLoading, setZernioLoading] = useState(true);
 
   useEffect(() => {
     if (!user || !accountId) return;
@@ -113,23 +104,18 @@ export function SettingsOverview({
       setCountsLoading(false);
     })();
 
-    // WhatsApp connection status — slower, independent.
+    // Zernio connection status — check if any social accounts are connected.
     (async () => {
-      setWhatsappLoading(true);
-      const [row, health] = await Promise.allSettled([
-        supabase
-          .from('whatsapp_config')
-          .select('phone_number_id')
-          .eq('account_id', acctId)
-          .maybeSingle(),
-        fetch('/api/whatsapp/config', { cache: 'no-store' }).then((r) => r.json()),
-      ]);
+      setZernioLoading(true);
+      const { data: conn } = await supabase
+        .from('zernio_connections')
+        .select('connected_accounts')
+        .eq('account_id', acctId)
+        .maybeSingle();
       if (cancelled) return;
-      setWhatsapp({
-        configured: row.status === 'fulfilled' && !!row.value.data?.phone_number_id,
-        connected: health.status === 'fulfilled' && !!health.value?.connected,
-      });
-      setWhatsappLoading(false);
+      const accounts = (conn?.connected_accounts as Array<unknown> | null) ?? [];
+      setZernioConnected(accounts.length > 0);
+      setZernioLoading(false);
     })();
 
     return () => {
@@ -155,24 +141,15 @@ export function SettingsOverview({
     subtitle: ReactNode;
   }[] = [
     {
-      section: 'whatsapp',
-      loading: whatsappLoading,
-      subtitle: !whatsapp?.configured ? (
-        'Not set up yet'
-      ) : whatsapp.connected ? (
+      section: 'social',
+      loading: zernioLoading,
+      subtitle: zernioConnected ? (
         <>
           <StatusDot tone="ok" /> Connected
         </>
       ) : (
-        <>
-          <StatusDot tone="muted" /> Needs reconnecting
-        </>
+        'Connect WhatsApp, Instagram & more'
       ),
-    },
-    {
-      section: 'instagram',
-      loading: false,
-      subtitle: 'Instagram DM integration',
     },
     {
       section: 'members',

@@ -205,7 +205,7 @@ export async function DELETE() {
       console.error('[ryzeapi DELETE] Remote instance deletion failed:', msg)
       return NextResponse.json(
         { error: `Failed to delete instance on RyzeAPI: ${msg}` },
-        { status: 502 },
+        { status: 500 },
       )
     }
 
@@ -457,7 +457,7 @@ async function handleLogout(
       console.error('[ryzeapi logout] failed:', msg)
       return NextResponse.json(
         { error: `Logout failed: ${msg}` },
-        { status: 502 },
+        { status: 500 },
       )
     }
   }

@@ -23,6 +23,8 @@ import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { getIgUserProfile } from '@/lib/instagram/meta-api'
+import { fireCapiEvent, getCapiConfig } from '@/lib/meta/capi-store'
+import { autoCreateDealForContact } from '@/lib/deals/auto-create'
 
 // Lazy-initialized to avoid build-time crash when env vars are missing
 let _adminClient: any = null
@@ -37,6 +39,11 @@ function supabaseAdmin() {
 }
 
 export const maxDuration = 60
+
+// Dedup unknown ig_user_id warnings — each ID is warned once per process
+// lifetime to avoid flooding logs every time a DM arrives for an account
+// that has no instagram_config row configured.
+const warnedUnconfiguredIgIds = new Set<string>()
 
 // ============================================================
 // GET — verify webhook subscription (hub handshake)
@@ -253,21 +260,14 @@ async function processInstagramWebhook(body: InstagramWebhookPayload) {
       .maybeSingle()
 
     if (configError || !config) {
-      const { data: allConfigs } = await db
-        .from('instagram_config')
-        .select('instagram_business_account_id, account_id, status')
-
-      console.error(
-        '[instagram webhook] no config found for ig_user_id:',
-        recipientIgUserId,
-        configError ? `error: ${configError.message}` : 'no matching row',
-        '| All configured IG accounts:',
-        allConfigs?.map((c: { instagram_business_account_id: string; account_id: string; status: string }) => ({
-          id: c.instagram_business_account_id,
-          account: c.account_id,
-          status: c.status,
-        })) ?? 'none',
-      )
+      if (!warnedUnconfiguredIgIds.has(recipientIgUserId)) {
+        warnedUnconfiguredIgIds.add(recipientIgUserId)
+        console.warn(
+          '[instagram webhook] no config found for ig_user_id:',
+          recipientIgUserId,
+          '(this warning fires once per process; subsequent DMs for this account are silently dropped)',
+        )
+      }
       continue
     }
 
@@ -299,9 +299,12 @@ async function processMessage(
     'from:', senderId,
     'text:', msg.text?.substring(0, 100))
 
-  // Ignore echo messages (sent by the business).
+  // Echo messages — sent by the business (agent via phone or dashboard).
+  // Save with sender_type = 'agent' and dispatch message.sent so n8n
+  // can detect human intervention. The recipient is the customer.
   if (msg.is_echo) {
-    console.log('[instagram webhook] skipping echo message')
+    console.log('[instagram webhook] processing echo message')
+    await processEchoMessage(db, config, item)
     return
   }
 
@@ -373,6 +376,16 @@ async function processMessage(
     }
     contactId = newContact.id
     contactWasCreated = true
+
+    // Fire CAPI Lead event for new Instagram contacts.
+    void fireCapiLeadForInstagramContact(accountId, contactId)
+    void autoCreateDealForContact(
+      db,
+      accountId,
+      configUserId,
+      contactId,
+      null,
+    )
   }
 
   // Fetch Instagram profile to populate name/username if missing.
@@ -597,7 +610,116 @@ async function processMessage(
     text: contentText,
     media_url: mediaUrl,
     sender: { id: senderId },
+    ...(interactiveReplyId ? { interactive_reply_id: interactiveReplyId } : {}),
   })
+}
+
+// Echo messages — sent by the business (agent via phone or dashboard).
+// Save with sender_type = 'agent' and dispatch message.sent so n8n can
+// detect human intervention. The echo sender is us (the business), so
+// the customer is `item.recipient.id`.
+
+async function processEchoMessage(
+  db: ReturnType<typeof supabaseAdmin>,
+  config: InstagramConfigRow,
+  item: InstagramMessagingItem,
+) {
+  const msg = item.message!
+  const accountId = config.account_id
+  const customerIgId = item.recipient.id
+
+  // Determine content type and text from the echo payload.
+  let contentText: string | null = null
+  if (msg.text) {
+    contentText = msg.text
+  } else if (msg.attachments && msg.attachments.length > 0) {
+    contentText = msg.text ?? `[${msg.attachments[0].type}]`
+  }
+
+  // Find contact by Instagram ID.
+  const { data: contact } = await db
+    .from('contacts')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('instagram_id', customerIgId)
+    .maybeSingle()
+  if (!contact) return
+
+  // Find or create conversation.
+  let { data: conv } = await db
+    .from('conversations')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('contact_id', contact.id)
+    .eq('channel', 'instagram')
+    .maybeSingle()
+
+  if (!conv) {
+    const { data: created } = await db
+      .from('conversations')
+      .insert({
+        account_id: accountId,
+        user_id: config.user_id,
+        contact_id: contact.id,
+        channel: 'instagram',
+        provider: 'meta',
+        status: 'open',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+    conv = created
+  }
+
+  // Dedup by message ID.
+  const { count: existing } = await db
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conv.id)
+    .eq('message_id', msg.mid)
+  if (existing && existing > 0) return
+
+  // Insert with sender_type = 'agent'.
+  const { error: msgErr } = await db.from('messages').insert({
+    account_id: accountId,
+    conversation_id: conv.id,
+    sender_type: 'agent',
+    content_type: 'text',
+    content_text: contentText,
+    message_id: msg.mid,
+    status: 'sent',
+  })
+  if (msgErr) {
+    console.error('[instagram webhook] echo message insert error:', msgErr)
+    return
+  }
+
+  // Update conversation.
+  await db
+    .from('conversations')
+    .update({
+      last_message_text: contentText ?? '[echo]',
+      last_message_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', conv.id)
+
+  // Dispatch message.sent webhook.
+  await dispatchWebhookEvent(
+    db,
+    accountId,
+    'message.sent',
+    {
+      conversation_id: conv.id,
+      contact_id: contact.id,
+      sender_type: 'agent',
+      content_type: 'text',
+      text: contentText,
+      channel: 'instagram',
+      provider: 'meta',
+    },
+  ).catch((err) => console.error('[webhook] message.sent dispatch failed:', err))
 }
 
 // ============================================================
@@ -625,21 +747,15 @@ async function processComment(
     .maybeSingle()
 
   if (configError || !config) {
-    const { data: allConfigs } = await db
-      .from('instagram_config')
-      .select('instagram_business_account_id, account_id, status')
-
-    console.error(
-      '[instagram webhook] no config found for comment target:',
-      igUserId,
-      configError ? `error: ${configError.message}` : 'no matching row',
-      '| All configured IG accounts:',
-      allConfigs?.map((c: { instagram_business_account_id: string; account_id: string; status: string }) => ({
-        id: c.instagram_business_account_id,
-        account: c.account_id,
-        status: c.status,
-      })) ?? 'none',
-    )
+    if (!warnedUnconfiguredIgIds.has(igUserId)) {
+      warnedUnconfiguredIgIds.add(igUserId)
+      console.warn(
+        '[instagram webhook] no config found for comment target:',
+        igUserId,
+        '(this warning fires once per process; subsequent comments for this account are silently dropped)',
+      )
+    }
+    return
     return
   }
 
@@ -848,4 +964,34 @@ interface InstagramConfigRow {
   status: string
   business_name: string | null
   connected_at: string | null
+}
+
+async function fireCapiLeadForInstagramContact(
+  accountId: string,
+  contactId: string,
+) {
+  try {
+    const config = await getCapiConfig(accountId)
+    if (!config?.pixel_id || !config?.access_token) return
+
+    const mapping = config.event_mapping as Record<string, { trigger: string }>
+    if (!mapping?.Lead?.trigger) return
+
+    await fireCapiEvent({
+      accountId,
+      eventName: 'Lead',
+      contactId,
+      dealId: null,
+      eventData: {
+        event_name: 'Lead',
+        event_time: Math.floor(Date.now() / 1000),
+        event_source_url: config.event_source_url || undefined,
+        user_data: {
+          external_id: contactId,
+        },
+      },
+    })
+  } catch (err) {
+    console.error('[capi] Lead event failed for Instagram contact:', err)
+  }
 }

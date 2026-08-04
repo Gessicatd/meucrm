@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 // landing in SERPs and offer nothing to a searcher who hasn't already
 // signed up. Each page still gets its own <title> via its own
 // metadata.title override below the route group layout.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   robots: {
     index: false,
