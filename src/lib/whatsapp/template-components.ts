@@ -14,7 +14,10 @@ import type { TemplatePayload } from './template-validators';
 import type { TemplateButton } from '@/types';
 
 export interface MetaComponent {
-  type: 'header' | 'body' | 'footer' | 'buttons';
+  // Zernio uses lowercase discriminators; Meta's Graph API uses
+  // uppercase. `submitMessageTemplate`/`editMessageTemplate` pass the
+  // payload through to Meta, so both cases are valid on the wire.
+  type: 'header' | 'body' | 'footer' | 'buttons' | 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
   format?: 'text' | 'image' | 'video' | 'document';
   text?: string;
   buttons?: MetaButtonPayload[];

@@ -15,7 +15,7 @@
 // ============================================================
 
 import { NextResponse, after } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { decrypt, encrypt } from '@/lib/whatsapp/encryption'
 import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
@@ -27,7 +27,7 @@ import { fireCapiEvent, getCapiConfig } from '@/lib/meta/capi-store'
 import { autoCreateDealForContact } from '@/lib/deals/auto-create'
 
 // Lazy-initialized to avoid build-time crash when env vars are missing
-let _adminClient: any = null
+let _adminClient: SupabaseClient | null = null
 function supabaseAdmin() {
   if (!_adminClient) {
     _adminClient = createClient(
@@ -76,7 +76,7 @@ export async function GET(request: Request) {
     return new NextResponse('Forbidden', { status: 403 })
   }
 
-  let matchedConfig: any = null
+  let matchedConfig: (typeof configs)[number] | null = null
   for (const config of configs) {
     if (!config.verify_token) continue
     try {
@@ -669,6 +669,7 @@ async function processEchoMessage(
       })
       .select('id')
       .single()
+    if (!created) return
     conv = created
   }
 

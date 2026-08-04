@@ -39,7 +39,8 @@ function TokenStatus({
   refreshError: string | null;
 }) {
   const expires = new Date(expiresAt);
-  const now = Date.now();
+  // Captured once on mount — fine for a "days left" display.
+  const [now] = useState(() => Date.now());
   const diffMs = expires.getTime() - now;
   const daysLeft = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 

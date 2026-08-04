@@ -53,19 +53,24 @@ function ContactSearchDialog({
   const [searching, setSearching] = useState(false);
   const supabase = createClient();
 
-  useEffect(() => {
+  // Reset local state when the dialog closes or the query is cleared —
+  // adjusted during render (React-sanctioned) instead of in an effect.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (!open) {
       setQuery("");
       setContacts([]);
-      return;
     }
-  }, [open]);
+  }
+  const [prevQuery, setPrevQuery] = useState(query);
+  if (query !== prevQuery) {
+    setPrevQuery(query);
+    if (!query.trim()) setContacts([]);
+  }
 
   useEffect(() => {
-    if (!query.trim()) {
-      setContacts([]);
-      return;
-    }
+    if (!open || !query.trim()) return;
     const timer = setTimeout(async () => {
       setSearching(true);
       const { data } = await supabase

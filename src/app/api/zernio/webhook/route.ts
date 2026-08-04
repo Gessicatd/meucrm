@@ -1,5 +1,6 @@
+import { createHmac, timingSafeEqual } from 'crypto';
 import { NextResponse, after } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getProfileId, updateConnectedAccounts } from '@/lib/zernio/store';
 import { normalizeZernioPayload } from '@/lib/zernio/normalize';
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
@@ -10,7 +11,7 @@ import type { SocialAccount } from '@/types';
 
 export const maxDuration = 60;
 
-let _adminClient: ReturnType<typeof createClient> | null = null;
+let _adminClient: SupabaseClient | null = null;
 function supabaseAdmin() {
   if (!_adminClient) {
     _adminClient = createClient(
@@ -35,13 +36,11 @@ function verifyZernioSignature(rawBody: string, signature: string | null): boole
     return true;
   }
 
-  const crypto = require('crypto');
-  const computed = crypto
-    .createHmac('sha256', ZERNIO_WEBHOOK_SECRET)
+  const computed = createHmac('sha256', ZERNIO_WEBHOOK_SECRET)
     .update(rawBody)
     .digest('hex');
 
-  return crypto.timingSafeEqual(
+  return timingSafeEqual(
     Buffer.from(signature, 'hex'),
     Buffer.from(computed, 'hex'),
   );
@@ -202,7 +201,7 @@ async function resolveAccountId(
   zernioProfileId: string,
 ): Promise<string | null> {
   const { getAccountId } = await import('@/lib/zernio/store');
-  let accountId = await getAccountId(zernioProfileId);
+  const accountId = await getAccountId(zernioProfileId);
   if (accountId) return accountId;
 
   const db = supabaseAdmin();
@@ -234,7 +233,7 @@ async function findOrCreateContact(
   name: string,
   platform: string,
 ): Promise<{ id: string; wasCreated: boolean } | null> {
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
 
   // Try to find by platform-specific ID
   const platformField =
@@ -284,7 +283,7 @@ async function findOrCreateContact(
     contactData.phone = normalizePhone(phoneOrId);
   }
 
-  const { data: newContact, error } = (await (db as any)
+  const { data: newContact, error } = (await db
     .from('contacts')
     .insert(contactData)
     .select('id')
@@ -309,9 +308,9 @@ async function findOrCreateConversation(
   zernioConversationId?: string,
   zernioAccountId?: string,
 ): Promise<{ id: string; created: boolean } | null> {
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
 
-  const { data: existing } = (await (db as any)
+  const { data: existing } = (await db
     .from('conversations')
     .select('id')
     .eq('account_id', accountId)
@@ -325,7 +324,7 @@ async function findOrCreateConversation(
       const updateData: Record<string, unknown> = {};
       if (zernioConversationId) updateData.zernio_conversation_id = zernioConversationId;
       if (zernioAccountId) updateData.zernio_account_id = zernioAccountId;
-      await (db as any)
+      await db
         .from('conversations')
         .update(updateData)
         .eq('id', existing.id);
@@ -442,7 +441,7 @@ async function handleInboundMessage(body: ZernioWebhookPayload) {
     : 'text';
   const mediaUrl = hasAttachment ? msg.attachments[0].url : null;
 
-  const { error: msgError } = await (db as any).from('messages').insert({
+  const { error: msgError } = await db.from('messages').insert({
     account_id: accountId,
     conversation_id: convOutcome.id,
     sender_type: 'customer',
@@ -462,7 +461,7 @@ async function handleInboundMessage(body: ZernioWebhookPayload) {
     return;
   }
 
-  await (db as any)
+  await db
     .from('conversations')
     .update({
       last_message_text: msg.text || `[${msg.platform}]`,
@@ -480,7 +479,7 @@ async function handleInboundMessage(body: ZernioWebhookPayload) {
   if (convFetchErr) {
     console.error('[zernio/webhook] failed to fetch conversation:', convFetchErr);
   } else if (conv) {
-    await (db as any)
+    await db
       .from('conversations')
       .update({
         unread_count: (conv.unread_count ?? 0) + 1,
@@ -593,7 +592,7 @@ async function handleMessageStatus(body: ZernioWebhookPayload) {
   const newStatus = statusMap[body.event];
   if (!newStatus) return;
 
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
 
   const { error: updErr, count: updatedCount } = await db
     .from('messages')
@@ -623,7 +622,7 @@ async function insertPlatformOutboundMessage(
   const accountId = await resolveAccountId(acct.accountId, acct.profileId);
   if (!accountId) return;
 
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
   const { data: profile } = await db
     .from('profiles')
     .select('user_id')
@@ -727,7 +726,7 @@ async function handleReactionReceived(body: ZernioWebhookPayload) {
   const accountId = await resolveAccountId(acct.accountId, acct.profileId);
   if (!accountId) return;
 
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
 
   if (reaction.messageId) {
     await db
@@ -741,7 +740,7 @@ async function handleReactionReceived(body: ZernioWebhookPayload) {
       })
       .select()
       .single()
-      .catch(() => {
+      .then(() => undefined, () => {
         // Dedup — reaction already exists is OK
       });
   }
@@ -766,7 +765,7 @@ async function handleCommentReceived(body: ZernioWebhookPayload) {
     return;
   }
 
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
   const { data: profile } = await db
     .from('profiles')
     .select('user_id')

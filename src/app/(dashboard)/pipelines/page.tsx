@@ -229,7 +229,7 @@ export default function PipelinesPage() {
         refreshDeals();
       }
     },
-    [supabase, refreshDeals],
+    [supabase, refreshDeals, t],
   );
 
   const handleAddDeal = useCallback(

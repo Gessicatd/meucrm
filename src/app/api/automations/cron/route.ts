@@ -111,7 +111,15 @@ export async function GET(request: Request) {
       console.info('[cron] checking', automations.length, 'time-based automations at',
         `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
 
-      for (const automation of automations as any[]) {
+      for (const automation of automations as {
+        id: string
+        name?: string
+        account_id: string
+        channel: string
+        provider: string | null
+        last_fired_at: string | null
+        trigger_config?: unknown
+      }[]) {
         const cfg = (automation.trigger_config ?? {}) as TimeBasedTriggerConfig
         const autoName = automation.name || automation.id
 

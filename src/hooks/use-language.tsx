@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useState,
   type ReactNode,
 } from 'react';
@@ -41,13 +40,9 @@ interface LanguageContextValue {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>(DEFAULT_LANGUAGE);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    setLanguageState(readInitialLanguage());
-    setReady(true);
-  }, []);
+  // Lazy initializer reads localStorage/document only in the browser
+  // (readInitialLanguage guards SSR) — no mount effect needed.
+  const [language, setLanguageState] = useState<Language>(readInitialLanguage);
 
   const setLanguage = useCallback((next: Language) => {
     if (!isLanguage(next)) return;

@@ -54,6 +54,18 @@ function makeSupabaseMock() {
           }
         case 'message_templates':
           return { data: null, error: null }
+        case 'ryzeapi_config':
+          return {
+            data: {
+              id: 'ryze-cfg-1',
+              account_id: 'acct-1',
+              status: 'connected',
+              api_url: 'https://ryze.test',
+              instance_token: 'enc-token',
+              instance_name: 'inst-1',
+            },
+            error: null,
+          }
         default:
           return { data: null, error: null }
       }
@@ -152,7 +164,19 @@ vi.mock('@/lib/whatsapp/meta-api', () => ({
   sendMediaMessage: vi.fn(),
 }))
 
+// The contact_id template path now routes through the configured provider
+// (Zernio or RyzeAPI) instead of Meta directly — the supabase mock above
+// provides a connected ryzeapi_config row, and this stubs the wire calls.
+vi.mock('@/lib/ryzeapi/client', () => ({
+  sendText: vi.fn(async () => ({ messageId: 'ryze-msg-1' })),
+  sendButtons: vi.fn(async () => ({ messageId: 'ryze-msg-1' })),
+  sendList: vi.fn(async () => ({ messageId: 'ryze-msg-1' })),
+  sendPix: vi.fn(async () => ({ messageId: 'ryze-msg-1' })),
+  sendMedia: vi.fn(async () => ({ messageId: 'ryze-msg-1' })),
+}))
+
 import { POST } from './route'
+import { sendText as sendRyzeText } from '@/lib/ryzeapi/client'
 
 function postContactTemplate(overrides: Record<string, unknown> = {}) {
   return POST(
@@ -193,7 +217,7 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
 
     expect(res.status).toBe(200)
     expect(json.success).toBe(true)
-    expect(json.whatsapp_message_id).toBe('wamid-1')
+    expect(json.whatsapp_message_id).toBe('ryze-msg-1')
 
     // A conversation was created for this contact.
     expect(conversationInserts).toHaveLength(1)
@@ -202,22 +226,22 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
       contact_id: 'contact-1',
     })
 
-    // The template was sent to the contact's number.
-    expect(sendTemplateMessage).toHaveBeenCalledTimes(1)
-    const args = (sendTemplateMessage.mock.calls[0] as unknown[])[0] as Record<
+    // The template was sent via the configured provider (RyzeAPI mock)
+    // to the contact's number.
+    expect(sendRyzeText).toHaveBeenCalledTimes(1)
+    const ryzeArgs = (vi.mocked(sendRyzeText).mock.calls[0] as unknown[])[0] as Record<
       string,
       unknown
     >
-    // Meta wants the bare E.164 digits — sanitizePhoneForMeta strips the '+'.
-    expect(args.to).toBe('15551234567')
-    expect(args.templateName).toBe('order_update')
+    expect(ryzeArgs.number).toBe('+15551234567')
+    expect(ryzeArgs.message).toBe('[template:order_update]')
 
     // The outbound message was persisted under the new conversation.
     expect(messageInserts).toHaveLength(1)
     expect(messageInserts[0]).toMatchObject({
       conversation_id: 'conv-new',
       content_type: 'template',
-      template_name: 'order_update',
+      message_id: 'ryze-msg-1',
       sender_type: 'agent',
     })
   })

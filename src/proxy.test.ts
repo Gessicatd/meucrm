@@ -32,6 +32,21 @@ vi.mock("@supabase/ssr", () => ({
         return { data: { user: mockUser } };
       },
     },
+    // The middleware resolves the user's account via `profiles` after
+    // getUser() — chainable stub returning a canned membership row.
+    from: (_table: string) => {
+      const b: Record<string, unknown> = {};
+      const chain = () => b;
+      for (const m of ["select", "eq"]) b[m] = vi.fn(chain);
+      b.maybeSingle = vi.fn(async () => ({
+        data: mockUser ? { account_id: "acct-1" } : null,
+        error: null,
+      }));
+      b.single = b.maybeSingle;
+      b.then = (resolve: (v: unknown) => unknown) =>
+        resolve({ data: mockUser ? [{ account_id: "acct-1" }] : [], error: null });
+      return b;
+    },
   }),
 }));
 

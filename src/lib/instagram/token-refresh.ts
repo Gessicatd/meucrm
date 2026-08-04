@@ -162,7 +162,7 @@ export async function getValidAccessToken(accountId: string): Promise<DecryptedC
 
   return {
     accessToken,
-    igUserId: (data as any).instagram_business_account_id,
+    igUserId: (data as { instagram_business_account_id: string }).instagram_business_account_id,
     config: current,
   }
 }
