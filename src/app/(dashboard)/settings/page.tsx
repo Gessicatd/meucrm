@@ -25,6 +25,7 @@ import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import { AiConfig } from '@/components/settings/ai-config';
 import { WebhooksSettings } from '@/components/settings/webhooks-settings';
 import { MetaCapiConfig } from '@/components/settings/meta-capi-config';
+import { SettingsErrorBoundary } from '@/components/settings/settings-error-boundary';
 import {
   resolveSection,
   SECTION_META,
@@ -113,7 +114,9 @@ function SettingsPageContent() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
         <SettingsRail active={section} onSelect={go} hints={hints} enabledFeatures={enabledFeatures} />
-        <div className="min-w-0">{panel[section]}</div>
+        <div className="min-w-0">
+          <SettingsErrorBoundary key={section}>{panel[section]}</SettingsErrorBoundary>
+        </div>
       </div>
     </div>
   );

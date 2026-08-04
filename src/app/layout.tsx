@@ -5,6 +5,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { LanguageProvider } from "@/hooks/use-language";
 import { ThemedToaster } from "@/components/themed-toaster";
+import { DeployRefresh } from "@/components/deploy-refresh";
 import {
   DEFAULT_MODE,
   DEFAULT_THEME,
@@ -125,6 +126,7 @@ export default function RootLayout({
         <ThemeProvider>
           <LanguageProvider>
             {children}
+            <DeployRefresh />
             <ThemedToaster />
           </LanguageProvider>
         </ThemeProvider>
