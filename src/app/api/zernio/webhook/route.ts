@@ -117,10 +117,11 @@ interface ZernioWebhookPayload {
     contactId: string;
   };
   post?: {
-    id: string;
-    content: string;
-    status: string;
-    platforms: Array<{ platform: string; accountId: string }>;
+    id?: string;
+    platformPostId?: string;
+    content?: string;
+    status?: string;
+    platforms?: Array<{ platform: string; accountId: string }>;
   };
   reaction?: {
     emoji: string;
@@ -142,10 +143,6 @@ interface ZernioWebhookPayload {
     };
     text?: string;
     createdAt?: string;
-  };
-  post?: {
-    id?: string;
-    platformPostId: string;
   };
 }
 
@@ -719,7 +716,7 @@ async function handleAccountDisconnected(body: ZernioWebhookPayload) {
 async function handlePostStatus(body: ZernioWebhookPayload) {
   const post = body.post!;
   console.log(
-    `[zernio/webhook] post ${body.event}: ${post.id} (${post.status})`,
+    `[zernio/webhook] post ${body.event}: ${post.id ?? '?'} (${post.status ?? '?'})`,
   );
 }
 
