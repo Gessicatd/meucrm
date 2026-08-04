@@ -2,6 +2,23 @@ import { AiError, type AiConfig, type ChatMessage, type GenerateResult } from '.
 import { HANDOFF_SENTINEL, aiRequestTimeoutMs } from './defaults'
 import { generateOpenAi } from './providers/openai'
 import { generateAnthropic } from './providers/anthropic'
+import { generateOpenAiCompatible } from './providers/openai-compatible'
+
+/** Chat Completions endpoint per OpenAI-compatible provider. */
+const OPENAI_COMPATIBLE_ENDPOINT: Record<string, { baseUrl: string; providerLabel: string }> = {
+  kimi: {
+    baseUrl: 'https://api.moonshot.ai/v1/chat/completions',
+    providerLabel: 'Kimi',
+  },
+  grok: {
+    baseUrl: 'https://api.x.ai/v1/chat/completions',
+    providerLabel: 'Grok',
+  },
+  gemini: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    providerLabel: 'Gemini',
+  },
+}
 
 export interface GenerateArgs {
   config: AiConfig
@@ -35,6 +52,13 @@ export async function generateReply(args: GenerateArgs): Promise<GenerateResult>
     case 'anthropic':
       raw = await generateAnthropic(providerArgs)
       break
+    case 'kimi':
+    case 'grok':
+    case 'gemini': {
+      const endpoint = OPENAI_COMPATIBLE_ENDPOINT[config.provider]
+      raw = await generateOpenAiCompatible({ ...providerArgs, ...endpoint })
+      break
+    }
     default:
       throw new AiError(`Unsupported AI provider: ${config.provider}`, {
         code: 'unsupported_provider',

@@ -13,7 +13,13 @@ import type { AiProvider } from './types'
 export const AI_PROVIDER_DEFAULT_MODEL: Record<AiProvider, string> = {
   openai: 'gpt-5.4-mini',
   anthropic: 'claude-haiku-4-5-20251001',
+  kimi: 'kimi-k2-0711-preview',
+  grok: 'grok-3-mini',
+  gemini: 'gemini-2.5-flash',
 }
+
+/** Every supported provider value — single source of truth for API-route validation. */
+export const AI_PROVIDERS = Object.keys(AI_PROVIDER_DEFAULT_MODEL) as AiProvider[]
 
 /**
  * Sentinel the model is instructed to emit (in auto-reply mode) when it

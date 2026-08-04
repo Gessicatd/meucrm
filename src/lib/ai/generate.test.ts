@@ -164,3 +164,46 @@ describe('generateReply — Anthropic', () => {
     expect(body.messages).toHaveLength(1)
   })
 })
+
+describe('generateReply — OpenAI-compatible (kimi/grok/gemini)', () => {
+  it.each([
+    ['kimi', 'api.moonshot.ai'],
+    ['grok', 'api.x.ai'],
+    ['gemini', 'generativelanguage.googleapis.com'],
+  ] as const)('dispatches %s to its chat completions endpoint', async (provider, host) => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        okResponse({ choices: [{ message: { content: 'Olá!' } }] }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await generateReply({
+      config: config({ provider }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Oi' }],
+    })
+
+    expect(res).toEqual({ text: 'Olá!', handoff: false })
+    const [url, opts] = fetchMock.mock.calls[0]
+    expect(url).toContain(host)
+    expect(url).toContain('chat/completions')
+    expect(opts.headers.Authorization).toBe('Bearer sk-test')
+  })
+
+  it('maps a 401 to an invalid_key AiError with the provider label', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        errResponse(401, { error: { message: 'bad key' } }),
+      ),
+    )
+    await expect(
+      generateReply({
+        config: config({ provider: 'grok' }),
+        systemPrompt: 'sys',
+        messages: [{ role: 'user', content: 'Hi' }],
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_key', status: 401 })
+  })
+})
